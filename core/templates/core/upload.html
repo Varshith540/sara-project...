@@ -1,0 +1,132 @@
+{% extends "core/base.html" %}
+{% block title %}Upload Resume – ResumeXpert{% endblock %}
+
+{% block content %}
+
+<!-- Hero -->
+<section class="rx-hero">
+  <div class="container text-center">
+    <div class="rx-hero-icon mb-4">
+      <i class="bi bi-file-earmark-person-fill"></i>
+    </div>
+    <h1 class="rx-hero-title">AI-Powered Resume Analyser</h1>
+    <p class="rx-hero-sub">
+      Upload your resume &amp; paste a job description to get an instant ATS score,
+      skill gap analysis, and personalised improvement suggestions.
+    </p>
+    <!-- Feature pills -->
+    <div class="d-flex flex-wrap justify-content-center gap-3 mt-4">
+      <span class="rx-pill"><i class="bi bi-lightning-charge-fill me-1"></i>Instant ATS Score</span>
+      <span class="rx-pill"><i class="bi bi-puzzle-fill me-1"></i>Skill Gap Analysis</span>
+      <span class="rx-pill"><i class="bi bi-lightbulb-fill me-1"></i>Smart Suggestions</span>
+      <span class="rx-pill"><i class="bi bi-journal-check me-1"></i>Skill-Based Exam</span>
+    </div>
+  </div>
+</section>
+
+<!-- Upload form -->
+<section class="py-5">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="rx-card p-4 p-md-5">
+
+          <h2 class="rx-section-title mb-4">
+            <i class="bi bi-cloud-upload me-2 text-primary"></i>Analyse Your Resume
+          </h2>
+
+          <form method="post" enctype="multipart/form-data" id="uploadForm" novalidate>
+            {% csrf_token %}
+
+            <!-- Name -->
+            <div class="mb-4">
+              <label class="form-label fw-600">
+                <i class="bi bi-person me-1"></i>{{ form.full_name.label }}
+              </label>
+              {{ form.full_name }}
+              {% if form.full_name.errors %}
+                <div class="invalid-feedback d-block">{{ form.full_name.errors.as_text }}</div>
+              {% endif %}
+            </div>
+
+            <!-- File upload dropzone -->
+            <div class="mb-4">
+              <label class="form-label fw-600">
+                <i class="bi bi-file-earmark-arrow-up me-1"></i>{{ form.resume_file.label }}
+              </label>
+              <div class="rx-dropzone" id="dropzone">
+                <i class="bi bi-cloud-arrow-up rx-dropzone-icon"></i>
+                <p class="rx-dropzone-text">Drag &amp; drop your resume here</p>
+                <p class="rx-dropzone-hint">or click to browse</p>
+                <p class="rx-dropzone-formats">Supported: PDF, DOCX &nbsp;·&nbsp; Max 5 MB</p>
+                {{ form.resume_file }}
+              </div>
+              <div id="fileInfo" class="rx-file-info d-none mt-2">
+                <i class="bi bi-file-earmark-check-fill text-success me-2"></i>
+                <span id="fileName"></span>
+                <span id="fileSize" class="text-muted ms-2"></span>
+              </div>
+              {% if form.resume_file.errors %}
+                <div class="invalid-feedback d-block">{{ form.resume_file.errors.as_text }}</div>
+              {% endif %}
+            </div>
+
+            <!-- Job description -->
+            <div class="mb-4">
+              <label class="form-label fw-600">
+                <i class="bi bi-briefcase me-1"></i>{{ form.job_description.label }}
+              </label>
+              {{ form.job_description }}
+              <div class="form-text">
+                <i class="bi bi-info-circle me-1"></i>
+                The more detailed the JD, the more accurate your ATS score will be.
+              </div>
+              {% if form.job_description.errors %}
+                <div class="invalid-feedback d-block">{{ form.job_description.errors.as_text }}</div>
+              {% endif %}
+            </div>
+
+            <!-- Submit -->
+            <div class="d-grid">
+              <button type="submit" class="btn rx-btn-primary btn-lg" id="submitBtn">
+                <span class="btn-text">
+                  <i class="bi bi-cpu me-2"></i>Analyse Resume
+                </span>
+                <span class="btn-loading d-none">
+                  <span class="spinner-border spinner-border-sm me-2"></span>Analysing…
+                </span>
+              </button>
+            </div>
+
+          </form>
+        </div>
+
+        <!-- How it works -->
+        <div class="rx-card p-4 mt-4">
+          <h5 class="fw-700 mb-3"><i class="bi bi-info-circle me-2 text-primary"></i>How It Works</h5>
+          <div class="row g-3">
+            <div class="col-sm-3 text-center">
+              <div class="rx-step-num">1</div>
+              <p class="small mt-2 mb-0">Upload your resume (PDF / DOCX)</p>
+            </div>
+            <div class="col-sm-3 text-center">
+              <div class="rx-step-num">2</div>
+              <p class="small mt-2 mb-0">Paste the job description</p>
+            </div>
+            <div class="col-sm-3 text-center">
+              <div class="rx-step-num">3</div>
+              <p class="small mt-2 mb-0">Get your ATS score &amp; analysis</p>
+            </div>
+            <div class="col-sm-3 text-center">
+              <div class="rx-step-num">4</div>
+              <p class="small mt-2 mb-0">Take the skill-based exam</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

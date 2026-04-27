@@ -1,0 +1,128 @@
+{% extends "core/base.html" %}
+{% load resume_filters %}
+{% block title %}Exam Result – ResumeXpert{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <!-- Result header -->
+  <div class="text-center mb-5">
+    {% if percent >= 70 %}
+      <div class="rx-result-icon rx-result-pass">
+        <i class="bi bi-trophy-fill"></i>
+      </div>
+      <h2 class="fw-800 mt-3 text-success">Congratulations! 🎉</h2>
+      <p class="text-muted fs-5">You passed the skill exam!</p>
+    {% elif percent >= 40 %}
+      <div class="rx-result-icon rx-result-average">
+        <i class="bi bi-emoji-neutral-fill"></i>
+      </div>
+      <h2 class="fw-800 mt-3 text-warning">Good Effort! 👍</h2>
+      <p class="text-muted fs-5">You're on the right track — keep practising.</p>
+    {% else %}
+      <div class="rx-result-icon rx-result-fail">
+        <i class="bi bi-book-fill"></i>
+      </div>
+      <h2 class="fw-800 mt-3 text-danger">Keep Studying! 💪</h2>
+      <p class="text-muted fs-5">Review the explanations below and try again.</p>
+    {% endif %}
+
+    <!-- Score card -->
+    <div class="rx-result-score-card mx-auto mt-4">
+      <div class="row g-0 text-center">
+        <div class="col-4">
+          <div class="rx-rs-val text-success">{{ score }}</div>
+          <div class="rx-rs-label">Correct</div>
+        </div>
+        <div class="col-4 border-start border-end">
+          <div class="rx-rs-val text-danger">{{ total|subtract:score }}</div>
+          <div class="rx-rs-label">Wrong</div>
+        </div>
+        <div class="col-4">
+          <div class="rx-rs-val text-primary">{{ percent }}%</div>
+          <div class="rx-rs-label">Score</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detailed review -->
+  <h4 class="fw-700 mb-4">
+    <i class="bi bi-list-check me-2 text-primary"></i>Question Review
+  </h4>
+
+  {% for item in detailed %}
+  <div class="rx-card rx-review-card p-4 mb-3 {% if item.is_correct %}rx-correct{% else %}rx-incorrect{% endif %}">
+    <div class="d-flex align-items-start gap-3">
+
+      <!-- Status icon -->
+      <div class="rx-review-icon {% if item.is_correct %}bg-success{% else %}bg-danger{% endif %}">
+        {% if item.is_correct %}
+          <i class="bi bi-check-lg text-white"></i>
+        {% else %}
+          <i class="bi bi-x-lg text-white"></i>
+        {% endif %}
+      </div>
+
+      <div class="flex-grow-1">
+        <!-- Skill tag & question -->
+        <span class="rx-skill-tag mb-2 d-inline-block">
+          <i class="bi bi-tag me-1"></i>{{ item.skill|title }}
+        </span>
+        <p class="fw-600 mb-3">{{ forloop.counter }}. {{ item.question }}</p>
+
+        <!-- Options -->
+        <div class="row g-2 mb-3">
+          {% for opt in item.options %}
+          <div class="col-md-6">
+            <div class="rx-review-option
+              {% if forloop.counter0 == item.correct_index %}rx-opt-correct{% endif %}
+              {% if forloop.counter0 == item.chosen and not item.is_correct %}rx-opt-wrong{% endif %}
+            ">
+              <span class="rx-opt-letter">{{ forloop.counter0|letter }}</span>
+              {{ opt }}
+              {% if forloop.counter0 == item.correct_index %}
+                <i class="bi bi-check-circle-fill text-success ms-1"></i>
+              {% endif %}
+              {% if forloop.counter0 == item.chosen and not item.is_correct %}
+                <i class="bi bi-x-circle-fill text-danger ms-1"></i>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <!-- Explanation -->
+        {% if item.explanation %}
+        <div class="rx-explanation">
+          <i class="bi bi-lightbulb-fill text-warning me-2"></i>
+          <strong>Explanation:</strong> {{ item.explanation }}
+        </div>
+        {% endif %}
+
+        <!-- Unanswered note -->
+        {% if item.chosen == -1 %}
+        <div class="alert alert-secondary py-1 px-3 mt-2 mb-0">
+          <small><i class="bi bi-dash-circle me-1"></i>Not answered</small>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- Action buttons -->
+  <div class="d-flex flex-wrap gap-3 justify-content-center mt-5">
+    <a href="{% url 'exam' result.pk %}" class="btn rx-btn-primary">
+      <i class="bi bi-arrow-repeat me-1"></i>Retake Exam
+    </a>
+    <a href="{% url 'dashboard' result.pk %}" class="btn btn-outline-secondary">
+      <i class="bi bi-bar-chart-line me-1"></i>Back to Dashboard
+    </a>
+    <a href="{% url 'upload' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-upload me-1"></i>Analyse New Resume
+    </a>
+  </div>
+
+</div>
+{% endblock %}

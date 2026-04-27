@@ -1,0 +1,187 @@
+{% extends "core/base.html" %}
+{% load resume_filters %}
+{% block title %}Skill Exam – ResumeXpert{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <!-- Header -->
+  <div class="text-center mb-5">
+    <h2 class="fw-800 mb-2">
+      <i class="bi bi-journal-check text-primary me-2"></i>Skill-Based Exam
+    </h2>
+    <p class="text-muted">
+      Candidate: <strong>{{ result.resume.name }}</strong> &nbsp;·&nbsp;
+      <strong>{{ total }}</strong> questions based on your matched skills
+    </p>
+    <!-- Timer -->
+    <div class="rx-timer-badge" id="examTimer">
+      <i class="bi bi-clock me-1"></i>
+      <span id="timerDisplay">20:00</span>
+    </div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="rx-exam-progress mb-4">
+    <div class="d-flex justify-content-between small text-muted mb-1">
+      <span>Progress</span>
+      <span id="progressLabel">0 / {{ total }} answered</span>
+    </div>
+    <div class="progress" style="height:10px; border-radius:10px;">
+      <div class="progress-bar rx-progress-bar" id="progressBar"
+           role="progressbar" style="width:0%"></div>
+    </div>
+  </div>
+
+  {% if questions %}
+  <form method="post" action="{% url 'exam_submit' result.pk %}" id="examForm">
+    {% csrf_token %}
+
+    {% for q in questions %}
+    <div class="rx-card rx-question-card p-4 mb-4" id="qcard-{{ forloop.counter0 }}">
+
+      <!-- Question header -->
+      <div class="d-flex align-items-start gap-3 mb-3">
+        <span class="rx-q-num">{{ forloop.counter }}</span>
+        <div class="flex-grow-1">
+          <span class="rx-skill-tag mb-2 d-inline-block">
+            <i class="bi bi-tag me-1"></i>{{ q.skill|title }}
+          </span>
+          <p class="rx-question-text mb-0">{{ q.question }}</p>
+        </div>
+      </div>
+
+      <!-- Options -->
+      <div class="row g-2 ms-5">
+        {% for option in q.options %}
+        <div class="col-md-6">
+          <label class="rx-option-label" for="q{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}">
+            <input
+              class="rx-option-radio"
+              type="radio"
+              name="q_{{ forloop.parentloop.counter0 }}"
+              id="q{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}"
+              value="{{ forloop.counter0 }}"
+              onchange="onAnswerSelect({{ forloop.parentloop.counter0 }})"
+            >
+            <span class="rx-option-letter">{{ forloop.counter0|letter }}</span>
+            <span class="rx-option-text">{{ option }}</span>
+          </label>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Not answered indicator -->
+      <div class="ms-5 mt-2 rx-unanswered-hint" id="hint-{{ forloop.counter0 }}">
+        <i class="bi bi-exclamation-circle text-warning me-1"></i>
+        <small class="text-warning">Not yet answered</small>
+      </div>
+
+    </div>
+    {% endfor %}
+
+    <!-- Submit -->
+    <div class="text-center mt-4 mb-5">
+      <div id="submitWarning" class="alert alert-warning d-none mb-3">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        You have <strong><span id="unansweredCount"></span></strong> unanswered question(s).
+        Submit anyway?
+      </div>
+      <button type="button" class="btn rx-btn-primary btn-lg px-5" onclick="submitExam()">
+        <i class="bi bi-send me-2"></i>Submit Exam
+      </button>
+    </div>
+
+  </form>
+
+  {% else %}
+  <div class="rx-card p-5 text-center">
+    <i class="bi bi-emoji-frown fs-1 text-muted mb-3 d-block"></i>
+    <h5>No questions available for your matched skills yet.</h5>
+    <p class="text-muted">We're adding more questions regularly. Try again after improving your resume.</p>
+    <a href="{% url 'dashboard' result.pk %}" class="btn rx-btn-primary mt-2">
+      <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+    </a>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const TOTAL = {{ total }};
+  const answered = new Set();
+
+  // ── Track answered questions ─────────────────────────────────────────
+  function onAnswerSelect(qIdx) {
+    answered.add(qIdx);
+    document.getElementById('hint-' + qIdx).style.display = 'none';
+    updateProgress();
+  }
+
+  function updateProgress() {
+    const pct = TOTAL > 0 ? (answered.size / TOTAL) * 100 : 0;
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent =
+      answered.size + ' / ' + TOTAL + ' answered';
+  }
+
+  // ── Submit with validation ───────────────────────────────────────────
+  function submitExam() {
+    const unanswered = TOTAL - answered.size;
+
+    // Highlight unanswered
+    for (let i = 0; i < TOTAL; i++) {
+      const hint = document.getElementById('hint-' + i);
+      if (!answered.has(i)) {
+        hint.style.display = 'block';
+        document.getElementById('qcard-' + i).classList.add('rx-unanswered');
+      }
+    }
+
+    if (unanswered > 0) {
+      document.getElementById('unansweredCount').textContent = unanswered;
+      const warn = document.getElementById('submitWarning');
+      warn.classList.remove('d-none');
+
+      // On second click, just submit
+      warn.querySelector && (warn.onclick = () => {
+        document.getElementById('examForm').submit();
+      });
+
+      // Auto-submit after second confirmation click on the button
+      document.querySelector('[onclick="submitExam()"]').setAttribute(
+        'onclick', "document.getElementById('examForm').submit()"
+      );
+      document.querySelector('[onclick="document.getElementById(\'examForm\').submit()"]')
+        && null; // no-op
+      return;
+    }
+
+    document.getElementById('examForm').submit();
+  }
+
+  // ── Countdown Timer ──────────────────────────────────────────────────
+  let seconds = 20 * 60;  // 20 minutes
+  const timerEl = document.getElementById('timerDisplay');
+
+  function tick() {
+    if (seconds <= 0) {
+      timerEl.textContent = '00:00';
+      document.getElementById('examForm').submit();
+      return;
+    }
+    seconds--;
+    const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const s = String(seconds % 60).padStart(2, '0');
+    timerEl.textContent = m + ':' + s;
+
+    if (seconds <= 60) {
+      document.getElementById('examTimer').classList.add('rx-timer-urgent');
+    }
+  }
+
+  setInterval(tick, 1000);
+</script>
+{% endblock %}
