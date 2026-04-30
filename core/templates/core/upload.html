@@ -45,7 +45,7 @@
               </label>
               {{ form.full_name }}
               {% if form.full_name.errors %}
-                <div class="invalid-feedback d-block">{{ form.full_name.errors.as_text }}</div>
+              <div class="invalid-feedback d-block">{{ form.full_name.errors.as_text }}</div>
               {% endif %}
             </div>
 
@@ -67,7 +67,7 @@
                 <span id="fileSize" class="text-muted ms-2"></span>
               </div>
               {% if form.resume_file.errors %}
-                <div class="invalid-feedback d-block">{{ form.resume_file.errors.as_text }}</div>
+              <div class="invalid-feedback d-block">{{ form.resume_file.errors.as_text }}</div>
               {% endif %}
             </div>
 
@@ -82,7 +82,7 @@
                 The more detailed the JD, the more accurate your ATS score will be.
               </div>
               {% if form.job_description.errors %}
-                <div class="invalid-feedback d-block">{{ form.job_description.errors.as_text }}</div>
+              <div class="invalid-feedback d-block">{{ form.job_description.errors.as_text }}</div>
               {% endif %}
             </div>
 
@@ -101,7 +101,15 @@
           </form>
         </div>
 
+        <!-- Trust / privacy bar -->
+        <div class="rx-trust-bar mt-3">
+          <span><i class="bi bi-shield-lock-fill me-1"></i>Your file is processed locally and never shared</span>
+          <span><i class="bi bi-file-earmark-check me-1"></i>Supports PDF &amp; DOCX up to 5 MB</span>
+          <span><i class="bi bi-cpu me-1"></i>AI-powered analysis using NLP + Gemini</span>
+        </div>
+
         <!-- How it works -->
+
         <div class="rx-card p-4 mt-4">
           <h5 class="fw-700 mb-3"><i class="bi bi-info-circle me-2 text-primary"></i>How It Works</h5>
           <div class="row g-3">

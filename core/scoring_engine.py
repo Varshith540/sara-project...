@@ -135,6 +135,7 @@ def calculate_score(resume_text: str, job_description: str) -> dict:
         skill_match_raw       = skill_raw,
         cosine_raw            = cosine_raw,
         completeness_sug      = completeness_suggestions,
+        job_skills_count      = len(job_skills),
     )
 
     return {
@@ -157,19 +158,25 @@ def _build_suggestions(
     skill_match_raw:  float,
     cosine_raw:       float,
     completeness_sug: list,
+    job_skills_count: int = 1,
 ) -> list:
     suggestions = []
     text_lower = resume_text.lower()
 
     # 1. Missing skills
-    if missing_skills:
+    if job_skills_count == 0:
+        suggestions.append(
+            "⚠️ We couldn't detect any technical skills in the job description. "
+            "Ensure you provided a complete description to get accurate skill matching."
+        )
+    elif missing_skills:
         top_missing = ", ".join(missing_skills[:6])
         suggestions.append(
             f"🔧 Add these in-demand skills to your resume: {top_missing}."
         )
 
     # 2. Low skill match
-    if skill_match_raw < 40:
+    if job_skills_count > 0 and skill_match_raw < 40:
         suggestions.append(
             "📌 Tailor your resume specifically to the job description — "
             "mirror the exact skill names the employer uses."

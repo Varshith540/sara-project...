@@ -20,9 +20,25 @@ def subtract(value, arg):
     except (ValueError, TypeError):
         return value
 
-@register.filter  
+@register.filter
 def get_item(lst, i):
     try:
         return lst[int(i)]
     except (IndexError, TypeError, ValueError):
         return ''
+
+@register.filter
+def index(lst, i):
+    """Get list item by index — alias for get_item."""
+    try:
+        return lst[int(i)]
+    except (IndexError, TypeError, ValueError):
+        return ''
+
+@register.filter
+def filter_correct(question_list):
+    """Count correct answers in a list of detailed question dicts."""
+    try:
+        return sum(1 for q in question_list if q.get('is_correct'))
+    except Exception:
+        return 0

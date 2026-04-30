@@ -41,6 +41,13 @@ class AnalysisResult(models.Model):
     missing_skills      = models.JSONField(default=list)
     resume_skills       = models.JSONField(default=list)
     suggestions         = models.JSONField(default=list)
+    # --- Gemini AI fields ---------------------------------------------------
+    ai_summary          = models.TextField(blank=True, default='')
+    ai_suggestions      = models.JSONField(default=list)
+    job_fit_score       = models.IntegerField(default=0)
+    # --- AI Resume Rewriter fields ------------------------------------------
+    rewritten_resume    = models.TextField(blank=True, default='')
+    improvement_notes   = models.JSONField(default=list)
     created_at          = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -50,6 +57,7 @@ class AnalysisResult(models.Model):
         return f"Analysis for {self.resume.name} – Score: {self.ats_score}%"
 
     # Helper used in template
+    @property
     def score_color(self):
         if self.ats_score >= 75:
             return 'success'
@@ -57,6 +65,7 @@ class AnalysisResult(models.Model):
             return 'warning'
         return 'danger'
 
+    @property
     def score_label(self):
         if self.ats_score >= 75:
             return 'Excellent'

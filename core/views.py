@@ -13,6 +13,7 @@ from .forms import ResumeUploadForm
 from .resume_parser import extract_text, extract_email, extract_phone, extract_name
 from .scoring_engine import calculate_score
 from .exam_generator import generate_exam, get_available_skills
+from .gemini_service import analyze_resume_with_gemini, generate_exam_questions_with_gemini, is_gemini_available, rewrite_resume_with_gemini
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +55,9 @@ def upload_resume(request):
             # ---- Run ATS scoring ------------------------------------------
             score_data = calculate_score(raw_text, job_description)
 
+            # ---- Run Gemini AI analysis (non-blocking, graceful fallback) --
+            gemini_data = analyze_resume_with_gemini(raw_text, job_description)
+
             result = AnalysisResult(
                 resume            = resume,
                 job_description   = job_description,
@@ -64,6 +68,10 @@ def upload_resume(request):
                 missing_skills    = score_data['missing_skills'],
                 resume_skills     = score_data['resume_skills'],
                 suggestions       = score_data['suggestions'],
+                # Gemini AI fields
+                ai_summary        = gemini_data.get('ai_summary', ''),
+                ai_suggestions    = gemini_data.get('ai_suggestions', []),
+                job_fit_score     = gemini_data.get('job_fit_score', 0),
             )
             result.save()
 
@@ -102,9 +110,10 @@ def dashboard(request, pk):
     }
 
     context = {
-        'result':     result,
-        'resume':     result.resume,
-        'chart_data': json.dumps(chart_data),
+        'result':           result,
+        'resume':           result.resume,
+        'chart_data':       json.dumps(chart_data),
+        'gemini_available': is_gemini_available(),
     }
     return render(request, 'core/dashboard.html', context)
 
@@ -127,6 +136,12 @@ def exam_view(request, pk):
     # Use matched skills first; fall back to all resume skills
     skills    = result.matched_skills or result.resume_skills
     questions = generate_exam(skills, num_questions=10)
+
+    # If static bank couldn't fill enough questions, use Gemini to generate more
+    if len(questions) < 5 and skills:
+        gemini_questions = generate_exam_questions_with_gemini(skills, num_questions=10)
+        if gemini_questions:
+            questions = gemini_questions
 
     # Store questions in session so we can score the submission
     request.session[f'exam_{pk}_questions'] = questions
@@ -217,3 +232,67 @@ def delete_result(request, pk):
     resume.delete()
     messages.success(request, "Record deleted successfully.")
     return redirect('history')
+
+
+# ---------------------------------------------------------------------------
+# AI Resume Rewriter view
+# ---------------------------------------------------------------------------
+def generate_resume(request, pk):
+    """Generate (or fetch cached) an AI-rewritten resume tailored to the JD."""
+    result = get_object_or_404(AnalysisResult, pk=pk)
+
+    # Allow force-regen by clearing cache
+    if request.GET.get('regen') == '1':
+        result.rewritten_resume  = ''
+        result.improvement_notes = []
+        result.save(update_fields=['rewritten_resume', 'improvement_notes'])
+
+    # Use cached version if already generated
+    if result.rewritten_resume:
+        context = {
+            'result':            result,
+            'resume':            result.resume,
+            'rewritten_resume':  result.rewritten_resume,
+            'improvement_notes': result.improvement_notes,
+            'gemini_available':  True,
+            'from_cache':        True,
+        }
+        return render(request, 'core/resume_rewrite.html', context)
+
+    # Check Gemini is available
+    if not is_gemini_available():
+        messages.error(
+            request,
+            "Gemini AI is not configured. Add your GEMINI_API_KEY to the .env file."
+        )
+        return redirect('dashboard', pk=pk)
+
+    # Call Gemini to rewrite the resume
+    rewrite_data = rewrite_resume_with_gemini(
+        resume_text      = result.resume.raw_text,
+        job_description  = result.job_description,
+        missing_skills   = result.missing_skills,
+        suggestions      = result.suggestions,
+    )
+
+    if not rewrite_data or not rewrite_data.get('rewritten_resume'):
+        messages.error(
+            request,
+            "Gemini could not generate the resume right now. Please try again."
+        )
+        return redirect('dashboard', pk=pk)
+
+    # Cache in DB
+    result.rewritten_resume  = rewrite_data['rewritten_resume']
+    result.improvement_notes = rewrite_data.get('improvement_notes', [])
+    result.save(update_fields=['rewritten_resume', 'improvement_notes'])
+
+    context = {
+        'result':            result,
+        'resume':            result.resume,
+        'rewritten_resume':  result.rewritten_resume,
+        'improvement_notes': result.improvement_notes,
+        'gemini_available':  True,
+        'from_cache':        False,
+    }
+    return render(request, 'core/resume_rewrite.html', context)

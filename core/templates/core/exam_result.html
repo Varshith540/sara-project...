@@ -5,26 +5,26 @@
 {% block content %}
 <div class="container py-5">
 
-  <!-- Result header -->
+  <!-- ── Result Hero ────────────────────────────────────────────────── -->
   <div class="text-center mb-5">
     {% if percent >= 70 %}
-      <div class="rx-result-icon rx-result-pass">
-        <i class="bi bi-trophy-fill"></i>
-      </div>
-      <h2 class="fw-800 mt-3 text-success">Congratulations! 🎉</h2>
-      <p class="text-muted fs-5">You passed the skill exam!</p>
+    <div class="rx-result-icon rx-result-pass mx-auto">
+      <i class="bi bi-trophy-fill"></i>
+    </div>
+    <h2 class="fw-800 mt-3">Congratulations! 🎉</h2>
+    <p class="text-muted fs-5">You passed the skill exam!</p>
     {% elif percent >= 40 %}
-      <div class="rx-result-icon rx-result-average">
-        <i class="bi bi-emoji-neutral-fill"></i>
-      </div>
-      <h2 class="fw-800 mt-3 text-warning">Good Effort! 👍</h2>
-      <p class="text-muted fs-5">You're on the right track — keep practising.</p>
+    <div class="rx-result-icon rx-result-average mx-auto">
+      <i class="bi bi-emoji-neutral-fill"></i>
+    </div>
+    <h2 class="fw-800 mt-3">Good Effort! 👍</h2>
+    <p class="text-muted fs-5">You're on the right track — keep practising.</p>
     {% else %}
-      <div class="rx-result-icon rx-result-fail">
-        <i class="bi bi-book-fill"></i>
-      </div>
-      <h2 class="fw-800 mt-3 text-danger">Keep Studying! 💪</h2>
-      <p class="text-muted fs-5">Review the explanations below and try again.</p>
+    <div class="rx-result-icon rx-result-fail mx-auto">
+      <i class="bi bi-book-fill"></i>
+    </div>
+    <h2 class="fw-800 mt-3">Keep Studying! 💪</h2>
+    <p class="text-muted fs-5">Review the explanations below and try again.</p>
     {% endif %}
 
     <!-- Score card -->
@@ -32,96 +32,211 @@
       <div class="row g-0 text-center">
         <div class="col-4">
           <div class="rx-rs-val text-success">{{ score }}</div>
-          <div class="rx-rs-label">Correct</div>
+          <div class="rx-rs-label">✅ Correct</div>
         </div>
         <div class="col-4 border-start border-end">
           <div class="rx-rs-val text-danger">{{ total|subtract:score }}</div>
-          <div class="rx-rs-label">Wrong</div>
+          <div class="rx-rs-label">❌ Wrong</div>
         </div>
         <div class="col-4">
-          <div class="rx-rs-val text-primary">{{ percent }}%</div>
+          <div
+            class="rx-rs-val {% if percent >= 70 %}text-success{% elif percent >= 40 %}text-warning{% else %}text-danger{% endif %}">
+            {{ percent }}%
+          </div>
           <div class="rx-rs-label">Score</div>
         </div>
       </div>
     </div>
+
+    <!-- Score interpretation -->
+    <div class="mt-3">
+      {% if percent >= 70 %}
+      <span class="badge px-3 py-2 fs-6" style="background:#dcfce7;color:#166534;">
+        <i class="bi bi-check-circle-fill me-1"></i>Strong Performance
+      </span>
+      <p class="text-muted mt-2 mb-0 small">You have solid knowledge of these skills. Apply them in real projects.</p>
+      {% elif percent >= 40 %}
+      <span class="badge px-3 py-2 fs-6" style="background:#fef9c3;color:#854d0e;">
+        <i class="bi bi-dash-circle-fill me-1"></i>Average — Room to Grow
+      </span>
+      <p class="text-muted mt-2 mb-0 small">Review the wrong answers below and focus on the weak topics.</p>
+      {% else %}
+      <span class="badge px-3 py-2 fs-6" style="background:#fee2e2;color:#991b1b;">
+        <i class="bi bi-x-circle-fill me-1"></i>Needs Improvement
+      </span>
+      <p class="text-muted mt-2 mb-0 small">Study the explanations carefully and retake the exam when ready.</p>
+      {% endif %}
+    </div>
   </div>
 
-  <!-- Detailed review -->
+  <!-- ── Topic-wise Breakdown ───────────────────────────────────────── -->
+  {% regroup detailed by skill as skill_groups %}
+  <div class="rx-card p-4 mb-5">
+    <h5 class="fw-700 mb-3">
+      <i class="bi bi-bar-chart-fill text-primary me-2"></i>Topic-wise Breakdown
+    </h5>
+    <div class="row g-3">
+      {% for group in skill_groups %}
+      {% with correct_count=group.list|filter_correct total_count=group.list|length %}
+      <div class="col-sm-6 col-md-4">
+        <div class="p-3 rounded" style="background:#f8fafc; border:1px solid #e2e8f0;">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="fw-600 text-capitalize">{{ group.grouper }}</span>
+            <span class="fw-700
+                {% if correct_count == total_count %}text-success
+                {% elif correct_count == 0 %}text-danger
+                {% else %}text-warning{% endif %}">
+              {{ correct_count }}/{{ total_count }}
+            </span>
+          </div>
+          <div class="progress" style="height:6px;border-radius:4px;">
+            <div class="progress-bar
+                {% if correct_count == total_count %}bg-success
+                {% elif correct_count == 0 %}bg-danger
+                {% else %}bg-warning{% endif %}" style="width:{% widthratio correct_count total_count 100 %}%">
+            </div>
+          </div>
+          <div class="small text-muted mt-1">
+            {% if correct_count == total_count %}
+            <i class="bi bi-check-circle-fill text-success me-1"></i>Excellent
+            {% elif correct_count == 0 %}
+            <i class="bi bi-x-circle-fill text-danger me-1"></i>Needs Review
+            {% else %}
+            <i class="bi bi-dash-circle-fill text-warning me-1"></i>Partial
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endwith %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── Question Review ────────────────────────────────────────────── -->
   <h4 class="fw-700 mb-4">
-    <i class="bi bi-list-check me-2 text-primary"></i>Question Review
+    <i class="bi bi-list-check me-2 text-primary"></i>Detailed Question Review
   </h4>
 
   {% for item in detailed %}
-  <div class="rx-card rx-review-card p-4 mb-3 {% if item.is_correct %}rx-correct{% else %}rx-incorrect{% endif %}">
-    <div class="d-flex align-items-start gap-3">
+  <div class="rx-card mb-4 overflow-hidden">
 
-      <!-- Status icon -->
-      <div class="rx-review-icon {% if item.is_correct %}bg-success{% else %}bg-danger{% endif %}">
+    <!-- Question header bar -->
+    <div
+      class="d-flex align-items-center px-4 py-3 {% if item.is_correct %}rx-qbar-correct{% else %}rx-qbar-wrong{% endif %}">
+      <div class="rx-review-icon-lg {% if item.is_correct %}bg-success{% else %}bg-danger{% endif %} me-3">
         {% if item.is_correct %}
-          <i class="bi bi-check-lg text-white"></i>
+        <i class="bi bi-check-lg text-white"></i>
         {% else %}
-          <i class="bi bi-x-lg text-white"></i>
+        <i class="bi bi-x-lg text-white"></i>
         {% endif %}
       </div>
-
       <div class="flex-grow-1">
-        <!-- Skill tag & question -->
-        <span class="rx-skill-tag mb-2 d-inline-block">
-          <i class="bi bi-tag me-1"></i>{{ item.skill|title }}
-        </span>
-        <p class="fw-600 mb-3">{{ forloop.counter }}. {{ item.question }}</p>
-
-        <!-- Options -->
-        <div class="row g-2 mb-3">
-          {% for opt in item.options %}
-          <div class="col-md-6">
-            <div class="rx-review-option
-              {% if forloop.counter0 == item.correct_index %}rx-opt-correct{% endif %}
-              {% if forloop.counter0 == item.chosen and not item.is_correct %}rx-opt-wrong{% endif %}
-            ">
-              <span class="rx-opt-letter">{{ forloop.counter0|letter }}</span>
-              {{ opt }}
-              {% if forloop.counter0 == item.correct_index %}
-                <i class="bi bi-check-circle-fill text-success ms-1"></i>
-              {% endif %}
-              {% if forloop.counter0 == item.chosen and not item.is_correct %}
-                <i class="bi bi-x-circle-fill text-danger ms-1"></i>
-              {% endif %}
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-
-        <!-- Explanation -->
-        {% if item.explanation %}
-        <div class="rx-explanation">
-          <i class="bi bi-lightbulb-fill text-warning me-2"></i>
-          <strong>Explanation:</strong> {{ item.explanation }}
-        </div>
-        {% endif %}
-
-        <!-- Unanswered note -->
-        {% if item.chosen == -1 %}
-        <div class="alert alert-secondary py-1 px-3 mt-2 mb-0">
-          <small><i class="bi bi-dash-circle me-1"></i>Not answered</small>
-        </div>
-        {% endif %}
+        <span class="rx-skill-tag me-2">{{ item.skill|title }}</span>
+        <span class="small text-muted">Question {{ forloop.counter }} of {{ detailed|length }}</span>
       </div>
+      {% if item.is_correct %}
+      <span class="badge px-3 py-2" style="background:#dcfce7;color:#166534;font-size:.85rem;">
+        CORRECT ✓
+      </span>
+      {% else %}
+      <span class="badge px-3 py-2" style="background:#fee2e2;color:#991b1b;font-size:.85rem;">
+        WRONG ✗
+      </span>
+      {% endif %}
     </div>
+
+    <!-- Question text -->
+    <div class="px-4 pt-3 pb-2">
+      <p class="fw-600 mb-3" style="font-size:1.05rem;line-height:1.6;">
+        {{ item.question }}
+      </p>
+
+      <!-- Options - 2-column grid -->
+      <div class="row g-2 mb-3">
+        {% for opt in item.options %}
+        <div class="col-md-6">
+          <div class="rx-review-option
+            {% if forloop.counter0 == item.correct_index %}rx-opt-correct{% endif %}
+            {% if forloop.counter0 == item.chosen and not item.is_correct %}rx-opt-wrong{% endif %}
+          ">
+            <span class="rx-opt-letter">{{ forloop.counter0|letter }}</span>
+            <span class="flex-grow-1">{{ opt }}</span>
+            {% if forloop.counter0 == item.correct_index %}
+            <i class="bi bi-check-circle-fill text-success ms-auto" style="flex-shrink:0;"></i>
+            {% elif forloop.counter0 == item.chosen and not item.is_correct %}
+            <i class="bi bi-x-circle-fill text-danger ms-auto" style="flex-shrink:0;"></i>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Your answer vs correct answer (only if wrong) -->
+      {% if not item.is_correct %}
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        {% if item.chosen >= 0 %}
+        <div class="px-3 py-1 rounded" style="background:#fee2e2;border:1px solid #fca5a5;font-size:.85rem;">
+          <i class="bi bi-x-circle me-1 text-danger"></i>
+          <strong>Your answer:</strong> {{ item.chosen|letter }} — {{ item.options|index:item.chosen }}
+        </div>
+        {% else %}
+        <div class="px-3 py-1 rounded" style="background:#f1f5f9;border:1px solid #e2e8f0;font-size:.85rem;">
+          <i class="bi bi-dash-circle me-1 text-muted"></i>Not answered
+        </div>
+        {% endif %}
+        <div class="px-3 py-1 rounded" style="background:#dcfce7;border:1px solid #86efac;font-size:.85rem;">
+          <i class="bi bi-check-circle me-1 text-success"></i>
+          <strong>Correct:</strong> {{ item.correct_index|letter }} — {{ item.options|index:item.correct_index }}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Explanation -->
+      {% if item.explanation %}
+      <div class="rx-explanation mb-3">
+        <div class="d-flex align-items-start gap-2">
+          <i class="bi bi-lightbulb-fill text-warning mt-1" style="flex-shrink:0;"></i>
+          <div>
+            <strong class="d-block mb-1" style="font-size:.85rem;color:#854d0e;">Explanation</strong>
+            <span style="font-size:.9rem;">{{ item.explanation }}</span>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
   </div>
   {% endfor %}
 
-  <!-- Action buttons -->
-  <div class="d-flex flex-wrap gap-3 justify-content-center mt-5">
-    <a href="{% url 'exam' result.pk %}" class="btn rx-btn-primary">
-      <i class="bi bi-arrow-repeat me-1"></i>Retake Exam
-    </a>
-    <a href="{% url 'dashboard' result.pk %}" class="btn btn-outline-secondary">
-      <i class="bi bi-bar-chart-line me-1"></i>Back to Dashboard
-    </a>
-    <a href="{% url 'upload' %}" class="btn btn-outline-secondary">
-      <i class="bi bi-upload me-1"></i>Analyse New Resume
-    </a>
+  <!-- ── Action Buttons ─────────────────────────────────────────────── -->
+  <div class="rx-card p-4 mt-2">
+    <div class="row align-items-center g-3">
+      <div class="col-md-6">
+        <h6 class="fw-700 mb-1">What's next?</h6>
+        <p class="text-muted mb-0 small">
+          {% if percent >= 70 %}
+          Excellent work! Analyse a new resume or check your dashboard.
+          {% elif percent >= 40 %}
+          Review weak topics, then retake the exam to improve your score.
+          {% else %}
+          Study the explanations above, then retake the exam.
+          {% endif %}
+        </p>
+      </div>
+      <div class="col-md-6">
+        <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+          <a href="{% url 'exam' result.pk %}" class="btn rx-btn-primary">
+            <i class="bi bi-arrow-repeat me-1"></i>Retake Exam
+          </a>
+          <a href="{% url 'dashboard' result.pk %}" class="btn btn-outline-primary">
+            <i class="bi bi-bar-chart-line me-1"></i>Dashboard
+          </a>
+          <a href="{% url 'upload' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-upload me-1"></i>New Resume
+          </a>
+        </div>
+      </div>
+    </div>
   </div>
 
 </div>

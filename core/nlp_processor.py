@@ -13,8 +13,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 # ---------------------------------------------------------------------------
 SKILLS_DB = {
     # Programming Languages
-    "python", "java", "javascript", "typescript", "c", "c++", "c#",
-    "ruby", "php", "swift", "kotlin", "go", "rust", "scala", "r",
+    "python", "java", "javascript", "typescript", "C", "c++", "c#",
+    "ruby", "php", "swift", "kotlin", "go", "rust", "scala", "R",
     "matlab", "perl", "bash", "shell", "powershell",
 
     # Web Development
@@ -101,11 +101,18 @@ def extract_skills(text: str) -> list:
 
     # Sort by length descending so multi-word skills match before sub-words
     for skill in sorted(SKILLS_DB, key=len, reverse=True):
-        pattern = r'\b' + re.escape(skill) + r'\b'
-        if re.search(pattern, text_lower):
-            # Resolve alias
-            canonical = SKILL_ALIASES.get(skill, skill)
-            found.add(canonical)
+        if len(skill) == 1:
+            # Case-sensitive match for single-letter skills like 'C' or 'R'
+            pattern = r'\b' + re.escape(skill.upper()) + r'\b'
+            if re.search(pattern, text):
+                canonical = SKILL_ALIASES.get(skill, skill)
+                found.add(canonical)
+        else:
+            pattern = r'\b' + re.escape(skill) + r'\b'
+            if re.search(pattern, text_lower):
+                # Resolve alias
+                canonical = SKILL_ALIASES.get(skill, skill)
+                found.add(canonical)
 
     return sorted(found)
 
@@ -154,8 +161,8 @@ def get_skill_categories(skills: list) -> dict:
     """
     categories = {
         "Programming Languages": {
-            "python", "java", "javascript", "typescript", "c", "c++", "c#",
-            "ruby", "php", "swift", "kotlin", "go", "rust", "scala", "r",
+            "python", "java", "javascript", "typescript", "C", "c++", "c#",
+            "ruby", "php", "swift", "kotlin", "go", "rust", "scala", "R",
             "matlab", "bash", "shell",
         },
         "Web Development": {

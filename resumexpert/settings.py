@@ -4,6 +4,10 @@ ResumeXpert - Django Settings
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv(Path(__file__).resolve().parent.parent / '.env')
 
 # ---------------------------------------------------------------------------
 # Base directory
@@ -117,3 +121,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ---------------------------------------------------------------------------
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024   # 5 MB
 DATA_UPLOAD_MAX_MEMORY_SIZE  = 5 * 1024 * 1024   # 5 MB
+
+# ---------------------------------------------------------------------------
+# Gemini AI
+# ---------------------------------------------------------------------------
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
