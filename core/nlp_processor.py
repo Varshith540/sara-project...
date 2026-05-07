@@ -12,80 +12,118 @@ from sklearn.metrics.pairwise import cosine_similarity
 # Master skill dictionary – grouped by domain
 # ---------------------------------------------------------------------------
 SKILLS_DB = {
-    # Programming Languages
+    # Programming / Software
     "python", "java", "javascript", "typescript", "C", "c++", "c#",
     "ruby", "php", "swift", "kotlin", "go", "rust", "scala", "R",
-    "matlab", "perl", "bash", "shell", "powershell",
+    "matlab", "perl", "bash", "shell", "powershell", "html", "css",
+    "react", "angular", "vue", "node.js", "django", "flask", "fastapi",
+    "spring boot", "laravel", "next.js", "docker", "kubernetes", "aws",
+    "azure", "gcp", "linux", "git", "github", "sql", "mysql", "postgresql",
+    "mongodb", "redis", "elasticsearch",
+    "machine learning", "deep learning", "artificial intelligence", "nlp",
+    "computer vision", "tensorflow", "pytorch", "pandas", "numpy",
 
-    # Web Development
-    "html", "css", "react", "reactjs", "angular", "vue", "vuejs",
-    "nodejs", "node.js", "express", "expressjs", "django", "flask",
-    "fastapi", "spring", "spring boot", "laravel", "asp.net",
-    "rest api", "restful", "graphql", "websocket", "bootstrap",
-    "tailwind", "sass", "less", "jquery", "next.js", "nuxt.js",
+    # Healthcare / Medical
+    "nursing", "patient care", "clinical research", "pharmacology", "emr",
+    "cpr", "bls", "acls", "vital signs", "phlebotomy", "medical billing",
+    "icd-10", "hipaa", "triage", "infection control", "anatomy", "physiology",
+    "healthcare management", "public health", "epidemiology",
 
-    # Data Science / ML / AI
-    "machine learning", "deep learning", "artificial intelligence",
-    "natural language processing", "nlp", "computer vision",
-    "neural network", "tensorflow", "keras", "pytorch", "scikit-learn",
-    "sklearn", "pandas", "numpy", "matplotlib", "seaborn", "plotly",
-    "opencv", "xgboost", "lightgbm", "bert", "gpt", "transformers",
-    "hugging face", "reinforcement learning", "data analysis",
-    "data science", "feature engineering", "model deployment",
+    # Law / Legal
+    "contract law", "litigation", "legal research", "compliance", "gdpr",
+    "corporate law", "intellectual property", "family law", "criminal law",
+    "legal drafting", "mediation", "arbitration", "case management", "due diligence",
+    "legal advice", "paralegal", "court procedures",
 
-    # Databases
-    "sql", "mysql", "postgresql", "sqlite", "mongodb", "redis",
-    "cassandra", "oracle", "firebase", "dynamodb", "elasticsearch",
-    "nosql", "database design", "orm",
+    # Finance / Accounting
+    "accounting", "cpa", "financial modelling", "ifrs", "bloomberg",
+    "taxation", "auditing", "financial analysis", "budgeting", "forecasting",
+    "payroll", "accounts payable", "accounts receivable", "reconciliation",
+    "erp", "sap", "quickbooks", "risk management", "investment banking", "valuation",
 
-    # Cloud & DevOps
-    "aws", "azure", "google cloud", "gcp", "docker", "kubernetes",
-    "jenkins", "ci/cd", "github actions", "terraform", "ansible",
-    "linux", "unix", "git", "github", "gitlab", "bitbucket",
-    "nginx", "apache", "heroku", "vercel", "netlify",
+    # Marketing / Sales
+    "seo", "sem", "google analytics", "brand management", "content strategy",
+    "digital marketing", "social media marketing", "email marketing", "crm",
+    "salesforce", "lead generation", "b2b sales", "b2c sales", "market research",
+    "copywriting", "public relations", "event management",
 
-    # Data Engineering
-    "hadoop", "spark", "kafka", "airflow", "etl", "data pipeline",
-    "bigquery", "snowflake", "dbt", "tableau", "power bi",
-    "excel", "looker", "data warehouse",
+    # Education / Teaching
+    "curriculum design", "pedagogy", "lesson planning", "lms", "cbse",
+    "icse", "special education", "classroom management", "student evaluation",
+    "e-learning", "instructional design", "mentoring", "tutoring", "higher education",
 
-    # Mobile
-    "android", "ios", "react native", "flutter", "dart",
-    "mobile development", "xamarin",
+    # Engineering (Non-IT)
+    "autocad", "solidworks", "structural analysis", "plc", "hvac",
+    "civil engineering", "mechanical engineering", "electrical engineering",
+    "manufacturing", "quality control", "six sigma", "cad/cam", "matlab",
+    "project estimation", "safety protocols",
 
-    # Security
-    "cybersecurity", "penetration testing", "ethical hacking",
-    "network security", "cryptography", "oauth", "jwt",
+    # HR / Admin
+    "recruitment", "hrms", "performance management", "pf", "esi",
+    "employee relations", "talent acquisition", "onboarding", "payroll processing",
+    "labor laws", "conflict resolution", "office administration", "data entry",
+    "scheduling", "executive support",
 
-    # Project / Soft Skills
-    "agile", "scrum", "kanban", "jira", "confluence", "trello",
-    "project management", "leadership", "communication", "teamwork",
-    "problem solving", "critical thinking",
+    # Design
+    "figma", "adobe xd", "photoshop", "illustrator", "ui/ux",
+    "typography", "graphic design", "wireframing", "prototyping", "color theory",
+    "interaction design", "inDesign", "video editing", "premiere pro", "after effects",
 
-    # Domain specific
-    "blockchain", "iot", "embedded systems", "robotics",
-    "image processing", "data visualization", "statistics",
-    "hypothesis testing", "regression", "classification", "clustering",
+    # Supply Chain / Operations
+    "logistics", "inventory management", "procurement", "vendor management", "supply chain",
+    "supply chain management", "warehouse management", "shipping", "freight forwarding",
+    "operations management", "quality assurance", "materials management",
+
+    # Hospitality
+    "front office", "food & beverage", "revenue management", "pms", "guest services",
+    "event planning", "housekeeping management", "hotel management", "catering",
+    "customer service", "reservation systems",
+    
+    # Generic Soft Skills
+    "agile", "scrum", "kanban", "jira", "project management", "leadership",
+    "communication", "teamwork", "problem solving", "critical thinking",
+    "time management", "presentation",
 }
 
 # Skill aliases (maps alternate names → canonical name)
 SKILL_ALIASES = {
-    "reactjs": "react",
-    "vuejs": "vue",
-    "nodejs": "node.js",
-    "sklearn": "scikit-learn",
-    "ml": "machine learning",
-    "dl": "deep learning",
-    "ai": "artificial intelligence",
-    "cv": "computer vision",
-    "js": "javascript",
-    "ts": "typescript",
-    "k8s": "kubernetes",
-    "tf": "tensorflow",
-    "py": "python",
-    "postgres": "postgresql",
-    "mongo": "mongodb",
+    "reactjs": "react", "vuejs": "vue", "nodejs": "node.js",
+    "sklearn": "scikit-learn", "ml": "machine learning", "dl": "deep learning",
+    "ai": "artificial intelligence", "cv": "computer vision", "js": "javascript",
+    "ts": "typescript", "k8s": "kubernetes", "tf": "tensorflow",
+    "py": "python", "postgres": "postgresql", "mongo": "mongodb",
+    "hr": "recruitment", "ui": "ui/ux", "ux": "ui/ux", "pr": "public relations",
 }
+
+# Sector identification keywords
+SECTORS = {
+    "IT / Software": ["software", "developer", "programmer", "data scientist", "web development", "devops", "cloud", "backend", "frontend", "full stack", "ai engineer"],
+    "Healthcare": ["doctor", "nurse", "hospital", "clinic", "clinical", "patient", "medical", "healthcare", "surgeon", "pharmacist"],
+    "Law & Legal": ["lawyer", "attorney", "legal", "court", "law firm", "litigation", "paralegal", "judge", "advocate"],
+    "Finance": ["accountant", "finance", "banking", "investment", "audit", "tax", "cpa", "financial analyst", "wealth management"],
+    "Marketing": ["marketing", "sales", "seo", "brand", "digital marketing", "advertising", "pr", "public relations"],
+    "Education": ["teacher", "professor", "school", "university", "education", "student", "faculty", "tutor", "instructor"],
+    "Engineering": ["civil engineer", "mechanical engineer", "electrical engineer", "manufacturing", "construction", "hvac", "autocad"],
+    "Human Resources": ["hr", "human resources", "recruiter", "talent acquisition", "payroll", "employee", "onboarding"],
+    "Design": ["designer", "ui/ux", "graphic designer", "art director", "creative", "figma", "photoshop"],
+    "Supply Chain": ["supply chain", "logistics", "warehouse", "procurement", "inventory", "vendor", "freight"],
+    "Hospitality": ["hotel", "restaurant", "hospitality", "chef", "front desk", "guest", "resort", "catering"]
+}
+
+def detect_sector(text: str) -> str:
+    """Identify the likely sector based on keywords in the text."""
+    text_lower = text.lower()
+    scores = {sector: 0 for sector in SECTORS}
+    
+    for sector, keywords in SECTORS.items():
+        for keyword in keywords:
+            if re.search(r'\b' + re.escape(keyword) + r'\b', text_lower):
+                scores[sector] += 1
+                
+    best_sector = max(scores, key=scores.get)
+    if scores[best_sector] == 0:
+        return "General / Unspecified"
+    return best_sector
 
 
 # ---------------------------------------------------------------------------
@@ -160,45 +198,61 @@ def get_skill_categories(skills: list) -> dict:
     Group a flat list of skills into broad categories for display.
     """
     categories = {
-        "Programming Languages": {
+        "IT & Technology": {
             "python", "java", "javascript", "typescript", "C", "c++", "c#",
             "ruby", "php", "swift", "kotlin", "go", "rust", "scala", "R",
-            "matlab", "bash", "shell",
-        },
-        "Web Development": {
             "html", "css", "react", "angular", "vue", "node.js", "django",
-            "flask", "fastapi", "spring boot", "rest api", "graphql",
-            "bootstrap", "tailwind", "jquery", "next.js",
+            "aws", "docker", "kubernetes", "sql", "mysql", "machine learning",
+            "artificial intelligence", "nlp", "tensorflow", "git", "linux"
         },
-        "Data Science & AI": {
-            "machine learning", "deep learning", "artificial intelligence",
-            "nlp", "computer vision", "tensorflow", "keras", "pytorch",
-            "scikit-learn", "pandas", "numpy", "data analysis", "data science",
-            "xgboost", "bert", "transformers",
+        "Healthcare & Medical": {
+            "nursing", "patient care", "clinical research", "pharmacology", "emr",
+            "cpr", "bls", "acls", "vital signs", "phlebotomy", "medical billing",
+            "hipaa", "triage", "infection control", "healthcare management",
+            "anatomy", "physiology", "epidemiology", "public health", "icd-10"
         },
-        "Databases": {
-            "sql", "mysql", "postgresql", "sqlite", "mongodb", "redis",
-            "oracle", "firebase", "dynamodb", "nosql",
+        "Finance & Accounting": {
+            "accounting", "cpa", "financial modelling", "ifrs", "bloomberg",
+            "taxation", "auditing", "financial analysis", "budgeting", "forecasting",
+            "payroll", "erp", "sap", "quickbooks", "risk management", "valuation"
         },
-        "Cloud & DevOps": {
-            "aws", "azure", "gcp", "docker", "kubernetes", "git",
-            "github", "ci/cd", "linux", "terraform", "jenkins",
+        "Marketing & Sales": {
+            "seo", "sem", "google analytics", "brand management", "content strategy",
+            "digital marketing", "social media marketing", "email marketing", "crm",
+            "salesforce", "lead generation", "b2b sales", "b2c sales", "copywriting"
         },
-        "Tools & Others": set(),   # Catch-all
+        "Design & Creative": {
+            "figma", "adobe xd", "photoshop", "illustrator", "ui/ux",
+            "typography", "graphic design", "wireframing", "prototyping",
+            "video editing", "premiere pro", "after effects", "inDesign"
+        },
+        "Business & HR": {
+            "recruitment", "hrms", "performance management", "pf", "esi",
+            "talent acquisition", "onboarding", "labor laws", "conflict resolution",
+            "office administration", "agile", "scrum", "project management",
+            "leadership", "communication"
+        },
+        "Engineering & Operations": {
+            "autocad", "solidworks", "structural analysis", "plc", "hvac",
+            "civil engineering", "mechanical engineering", "electrical engineering",
+            "quality control", "six sigma", "logistics", "inventory management",
+            "procurement", "supply chain"
+        },
+        "Other Skills": set()
     }
 
     result = {cat: [] for cat in categories}
     for skill in skills:
         placed = False
         for cat, cat_skills in categories.items():
-            if cat == "Tools & Others":
+            if cat == "Other Skills":
                 continue
             if skill in cat_skills:
                 result[cat].append(skill)
                 placed = True
                 break
         if not placed:
-            result["Tools & Others"].append(skill)
+            result["Other Skills"].append(skill)
 
     # Remove empty categories
     return {k: v for k, v in result.items() if v}

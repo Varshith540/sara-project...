@@ -1,0 +1,96 @@
+{% extends "core/base.html" %}
+{% block title %}Company Analysis – {{ result.company_name|default:'New Search' }} | ResumeXpert{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <h2 class="fw-800 mb-0" style="color:#2563eb;">
+      <i class="bi bi-buildings me-2"></i>Company Analysis
+    </h2>
+    <a href="{% url 'dashboard' result.pk %}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+    </a>
+  </div>
+
+  <div class="rx-card p-4 mb-4" style="background:#f8fafc;">
+    <form method="POST" class="d-flex gap-2">
+      {% csrf_token %}
+      <input type="text" name="company_name" class="form-control form-control-lg"
+             placeholder="Enter company name to research..."
+             value="{{ result.company_name }}" required>
+      <button type="submit" class="btn btn-primary btn-lg px-4 fw-600" id="searchBtn">
+        <i class="bi bi-search me-2"></i>Analyze
+      </button>
+    </form>
+  </div>
+
+  {% if result.company_analysis %}
+  <div class="row g-4">
+    <!-- Overview & Culture -->
+    <div class="col-lg-8">
+      <div class="rx-card p-4 h-100">
+        <h4 class="fw-800 mb-4">{{ result.company_name }}</h4>
+        
+        <h6 class="fw-700 text-uppercase text-muted small mb-2">Company Overview</h6>
+        <p style="font-size:1.05rem;line-height:1.7;">{{ result.company_analysis.company_overview }}</p>
+        
+        <hr class="my-4">
+        
+        <h6 class="fw-700 text-uppercase text-muted small mb-2">Work Culture & Values</h6>
+        <div class="p-3 rounded" style="background:#f0fdf4;border-left:4px solid #22c55e;">
+          <p class="mb-0" style="font-size:1rem;line-height:1.6;color:#166534;">
+            {{ result.company_analysis.culture }}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Sidebar -->
+    <div class="col-lg-4">
+      <!-- Interview Style -->
+      <div class="rx-card p-4 mb-4">
+        <h6 class="fw-700 text-uppercase text-muted small mb-3">
+          <i class="bi bi-chat-dots me-1 text-primary"></i>Interview Style
+        </h6>
+        <p class="small mb-0" style="line-height:1.6;">
+          {{ result.company_analysis.interview_style }}
+        </p>
+      </div>
+
+      <!-- Valued Skills -->
+      <div class="rx-card p-4 mb-4">
+        <h6 class="fw-700 text-uppercase text-muted small mb-3">
+          <i class="bi bi-star-fill me-1 text-warning"></i>Key Skills Valued
+        </h6>
+        <div class="d-flex flex-wrap gap-2">
+          {% for skill in result.company_analysis.valued_skills %}
+          <span class="badge" style="background:#dbeafe;color:#1e40af;font-size:.85rem;padding:6px 12px;">
+            {{ skill }}
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Salary Estimate -->
+      <div class="rx-card p-4" style="background:linear-gradient(135deg,#1e293b,#0f172a);color:#fff;">
+        <h6 class="fw-700 text-uppercase small mb-2" style="color:#94a3b8;">
+          <i class="bi bi-cash-stack me-1"></i>Salary Estimate
+        </h6>
+        <div style="font-size:1.5rem;font-weight:800;color:#34d399;">
+          {{ result.company_analysis.salary_estimate }}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+document.querySelector('form').addEventListener('submit', function() {
+  const btn = document.getElementById('searchBtn');
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Analyzing...';
+  btn.disabled = true;
+});
+</script>
+{% endblock %}

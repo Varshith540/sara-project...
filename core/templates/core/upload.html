@@ -49,22 +49,90 @@
               {% endif %}
             </div>
 
+            <!-- Target Industry -->
+            <div class="mb-4">
+              <label class="form-label fw-600">
+                <i class="bi bi-bullseye me-1"></i>{{ form.target_industry.label }}
+              </label>
+              {{ form.target_industry }}
+              <datalist id="industryOptions">
+                <!-- IT -->
+                <option value="Software Developer">
+                <option value="Data Scientist">
+                <option value="Cyber Security Analyst">
+                <option value="DevOps Engineer">
+                <option value="Cloud Architect">
+                <option value="Frontend Developer">
+                <option value="Backend Developer">
+                <!-- Technical Trades -->
+                <option value="Electrical Installation">
+                <option value="Mechanical Technician">
+                <option value="Electronics Engineer">
+                <option value="HVAC Technician">
+                <option value="Welding & Fabrication">
+                <!-- Corporate / Non-IT -->
+                <option value="Sales Executive">
+                <option value="Marketing Manager">
+                <option value="Banking & Finance">
+                <option value="HR Administrator">
+                <option value="Office Admin">
+                <option value="Customer Support">
+                <option value="Retail Management">
+                <option value="Operations Manager">
+              </datalist>
+              <div class="form-text">Choose from the list or type your own custom role.</div>
+              {% if form.target_industry.errors %}
+              <div class="invalid-feedback d-block">{{ form.target_industry.errors.as_text }}</div>
+              {% endif %}
+            </div>
+
             <!-- File upload dropzone -->
             <div class="mb-4">
               <label class="form-label fw-600">
                 <i class="bi bi-file-earmark-arrow-up me-1"></i>{{ form.resume_file.label }}
               </label>
               <div class="rx-dropzone" id="dropzone">
-                <i class="bi bi-cloud-arrow-up rx-dropzone-icon"></i>
-                <p class="rx-dropzone-text">Drag &amp; drop your resume here</p>
-                <p class="rx-dropzone-hint">or click to browse</p>
-                <p class="rx-dropzone-formats">Supported: PDF, DOCX &nbsp;·&nbsp; Max 5 MB</p>
-                {{ form.resume_file }}
+                <i id="dropzoneIcon" class="bi bi-cloud-arrow-up rx-dropzone-icon"></i>
+                <p id="dropzoneText" class="rx-dropzone-text">Drag &amp; drop your resume here</p>
+                <p id="dropzoneHint" class="rx-dropzone-hint">or click to browse</p>
+                <p id="dropzoneFormats" class="rx-dropzone-formats">PDF &nbsp;·&nbsp; DOCX &nbsp;·&nbsp; JPG &nbsp;·&nbsp; PNG &nbsp;·&nbsp; Max 50 MB</p>
               </div>
-              <div id="fileInfo" class="rx-file-info d-none mt-2">
-                <i class="bi bi-file-earmark-check-fill text-success me-2"></i>
-                <span id="fileName"></span>
-                <span id="fileSize" class="text-muted ms-2"></span>
+              <!-- fileInput lives OUTSIDE the dropzone — prevents event bubbling loop -->
+              <div style="display:none;">{{ form.resume_file }}</div>
+
+              <div id="filePreviewCard" class="rx-file-preview-card d-none mt-3 p-3 rounded shadow-sm border border-success bg-white d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-3">
+                  <!-- Icon OR image thumbnail -->
+                  <div id="previewIconBox" class="bg-success-subtle text-success p-2 rounded fs-3" style="flex-shrink:0;">
+                    <i class="bi bi-file-earmark-pdf-fill" id="previewFileIcon"></i>
+                  </div>
+                  <img id="previewThumb" src="" alt="Resume preview"
+                       style="display:none;width:56px;height:56px;object-fit:cover;border-radius:8px;border:2px solid #86efac;flex-shrink:0;">
+                  <div>
+                    <h6 id="previewFileName" class="mb-0 fw-bold text-dark">filename.pdf</h6>
+                    <small id="previewFileSize" class="text-muted">0 MB</small>
+                    <div class="mt-1">
+                      <span id="previewBadge" class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Ready to Analyse</span>
+                    </div>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-outline-danger btn-sm" id="removeFileBtn">
+                  <i class="bi bi-trash me-1"></i>Remove
+                </button>
+              </div>
+
+              <!-- Re-select banner (shown on validation failure when file was previously chosen) -->
+              <div id="reSelectBanner" class="alert alert-warning d-none mt-3 py-2 px-3 d-flex align-items-center gap-2" role="alert">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <span>Your file was cleared by the browser after the error. <strong>Please re-select your file.</strong></span>
+              </div>
+
+              <div id="fileError" class="rx-error-toast d-none mt-2" role="alert">
+                <div class="d-flex align-items-center gap-2">
+                  <i class="bi bi-x-octagon-fill text-danger fs-5"></i>
+                  <span id="fileErrorText" class="fw-600"></span>
+                </div>
+                <button type="button" class="btn-close btn-close-sm ms-auto" onclick="document.getElementById('fileError').classList.add('d-none');"></button>
               </div>
               {% if form.resume_file.errors %}
               <div class="invalid-feedback d-block">{{ form.resume_file.errors.as_text }}</div>
@@ -92,8 +160,19 @@
                 <span class="btn-text">
                   <i class="bi bi-cpu me-2"></i>Analyse Resume
                 </span>
-                <span class="btn-loading d-none">
-                  <span class="spinner-border spinner-border-sm me-2"></span>Analysing…
+                <!-- Phase 1: Upload started -->
+                <span class="btn-phase d-none" id="phaseUpload">
+                  <span class="spinner-border spinner-border-sm me-2"></span>Uploading…
+                </span>
+                <!-- Phase 2: Local PDF→JPEG conversion (for scanned PDFs / images) -->
+                <span class="btn-phase d-none" id="phaseConvert">
+                  <span class="spinner-border spinner-border-sm me-2"></span>
+                  <i class="bi bi-file-earmark-image me-1"></i>Converting document for AI analysis…
+                </span>
+                <!-- Phase 3: AI processing -->
+                <span class="btn-phase d-none" id="phaseAnalyse">
+                  <span class="spinner-border spinner-border-sm me-2"></span>
+                  <i class="bi bi-stars me-1"></i>Analysing with AI…
                 </span>
               </button>
             </div>
@@ -104,12 +183,11 @@
         <!-- Trust / privacy bar -->
         <div class="rx-trust-bar mt-3">
           <span><i class="bi bi-shield-lock-fill me-1"></i>Your file is processed locally and never shared</span>
-          <span><i class="bi bi-file-earmark-check me-1"></i>Supports PDF &amp; DOCX up to 5 MB</span>
-          <span><i class="bi bi-cpu me-1"></i>AI-powered analysis using NLP + Gemini</span>
+          <span><i class="bi bi-file-earmark-check me-1"></i>PDF, DOCX, JPG &amp; PNG up to 50 MB</span>
+          <span><i class="bi bi-cpu me-1"></i>AI-powered: NLP + Gemini Vision</span>
         </div>
 
         <!-- How it works -->
-
         <div class="rx-card p-4 mt-4">
           <h5 class="fw-700 mb-3"><i class="bi bi-info-circle me-2 text-primary"></i>How It Works</h5>
           <div class="row g-3">
@@ -136,5 +214,248 @@
     </div>
   </div>
 </section>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Element refs ──────────────────────────────────────────────────────────
+  const fileInput       = document.getElementById('resumeFile');
+  const jdInput         = document.getElementById('id_job_description');
+  const submitBtn       = document.getElementById('submitBtn');
+  const dropzone        = document.getElementById('dropzone');
+  const filePreviewCard = document.getElementById('filePreviewCard');
+  const removeFileBtn   = document.getElementById('removeFileBtn');
+  const fileError       = document.getElementById('fileError');
+  const reSelectBanner  = document.getElementById('reSelectBanner');
+  const previewBadge    = document.getElementById('previewBadge');
+  const previewIconBox  = document.getElementById('previewIconBox');
+  const previewThumb    = document.getElementById('previewThumb');
+  const previewFileIcon = document.getElementById('previewFileIcon');
+
+  // ── Allowed extensions ───────────────────────────────────────────────────
+  const ALLOWED = ['.pdf', '.docx', '.jpg', '.jpeg', '.png'];
+  const IMAGE_TYPES = ['.jpg', '.jpeg', '.png'];
+
+  // ── Double-click guard ────────────────────────────────────────────────────
+  let _pickerOpen = false;
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function formatBytes(bytes, decimals = 1) {
+    if (!+bytes) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
+  }
+
+  function getFileExt(name) {
+    const idx = name.lastIndexOf('.');
+    return idx >= 0 ? name.slice(idx).toLowerCase() : '';
+  }
+
+  function showPreviewCard(name, sizeText, reSelect, isImage, thumbUrl) {
+    document.getElementById('previewFileName').textContent = name;
+    document.getElementById('previewFileSize').textContent = sizeText;
+
+    if (isImage && thumbUrl) {
+      previewIconBox.style.display = 'none';
+      previewThumb.src = thumbUrl;
+      previewThumb.style.display = 'block';
+    } else {
+      previewThumb.style.display = 'none';
+      previewIconBox.style.display = '';
+      const ext = getFileExt(name);
+      previewFileIcon.className = ext === '.pdf'
+        ? 'bi bi-file-earmark-pdf-fill'
+        : ext === '.docx'
+          ? 'bi bi-file-earmark-word-fill'
+          : 'bi bi-image-fill';
+    }
+
+    if (reSelect) {
+      previewBadge.className = 'badge bg-warning text-dark';
+      previewBadge.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Re-select file below';
+    } else {
+      previewBadge.className = isImage ? 'badge bg-info' : 'badge bg-success';
+      previewBadge.innerHTML = isImage
+        ? '<i class="bi bi-eye me-1"></i>Vision AI will analyse'
+        : '<i class="bi bi-check-circle me-1"></i>Ready to Analyse';
+    }
+    dropzone.classList.add('d-none');
+    filePreviewCard.classList.remove('d-none');
+    filePreviewCard.classList.add('d-flex');
+  }
+
+  function resetFileUI() {
+    if (fileInput) fileInput.value = '';
+    filePreviewCard.classList.add('d-none');
+    filePreviewCard.classList.remove('d-flex');
+    dropzone.classList.remove('d-none');
+    hideErrorToast();
+    reSelectBanner.classList.add('d-none');
+    previewThumb.style.display = 'none';
+    previewThumb.src = '';
+    previewIconBox.style.display = '';
+    sessionStorage.removeItem('rx_pending_file');
+    validateForm();
+  }
+
+  function validateForm() {
+    const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+    const hasJD   = jdInput && jdInput.value.trim().length >= 30;
+    submitBtn.disabled = !(hasFile && hasJD);
+  }
+
+  // ── On page load: restore state if returning from a failed POST ───────────
+  {% if form.errors %}
+  (function restoreAfterError() {
+    const saved = sessionStorage.getItem('rx_pending_file');
+    if (saved) {
+      try {
+        const { name, size } = JSON.parse(saved);
+        const isImg = IMAGE_TYPES.some(e => name.toLowerCase().endsWith(e));
+        showPreviewCard(name, size, true, isImg, null);
+        reSelectBanner.classList.remove('d-none');
+      } catch(e) { /* ignore */ }
+    }
+  })();
+  {% else %}
+  sessionStorage.removeItem('rx_pending_file');
+  {% endif %}
+
+  // ── JD input listener ─────────────────────────────────────────────────────
+  if (jdInput) jdInput.addEventListener('input', validateForm);
+
+  // ── Dropzone click — with double-click guard ──────────────────────────────
+  if (dropzone && fileInput) {
+    dropzone.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (_pickerOpen) return;
+      _pickerOpen = true;
+      fileInput.click();
+      setTimeout(() => { _pickerOpen = false; }, 1200);
+    });
+
+    dropzone.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      dropzone.classList.add('rx-dropzone-active');
+    });
+    dropzone.addEventListener('dragleave', function () {
+      dropzone.classList.remove('rx-dropzone-active');
+    });
+    dropzone.addEventListener('drop', function (e) {
+      e.preventDefault();
+      dropzone.classList.remove('rx-dropzone-active');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const dt = new DataTransfer();
+        dt.items.add(e.dataTransfer.files[0]);
+        fileInput.files = dt.files;
+        fileInput.dispatchEvent(new Event('change'));
+      }
+    });
+  }
+
+  // ── File input change ─────────────────────────────────────────────────────
+  function showErrorToast(msg) {
+    const box = document.getElementById('fileError');
+    document.getElementById('fileErrorText').textContent = msg;
+    box.classList.remove('d-none');
+    box.classList.add('rx-error-toast-in');
+  }
+  function hideErrorToast() {
+    document.getElementById('fileError').classList.add('d-none');
+    document.getElementById('fileError').classList.remove('rx-error-toast-in');
+  }
+
+  if (fileInput) {
+    fileInput.addEventListener('change', function (e) {
+      e.stopPropagation();    // never bubble the change event
+      _pickerOpen = false;
+      hideErrorToast();
+      reSelectBanner.classList.add('d-none');
+
+      if (this.files && this.files[0]) {
+        const file    = this.files[0];
+        const ext     = getFileExt(file.name);
+        const isImage = IMAGE_TYPES.includes(ext);
+
+        if (!ALLOWED.includes(ext)) {
+          showErrorToast('Invalid format. Supported: PDF, DOCX, JPG, PNG.');
+          resetFileUI();
+          return;
+        }
+        if (file.size > 50 * 1024 * 1024) {
+          showErrorToast('File too large — max 50 MB.');
+          resetFileUI();
+          return;
+        }
+
+        const sizeText = formatBytes(file.size);
+        sessionStorage.setItem('rx_pending_file', JSON.stringify({ name: file.name, size: sizeText }));
+
+        if (isImage) {
+          // Generate object URL for thumbnail preview
+          const thumbUrl = URL.createObjectURL(file);
+          showPreviewCard(file.name, sizeText, false, true, thumbUrl);
+        } else {
+          showPreviewCard(file.name, sizeText, false, false, null);
+        }
+        validateForm();
+      }
+    });
+  }
+
+  // ── Remove file button ────────────────────────────────────────────────────
+  if (removeFileBtn) removeFileBtn.addEventListener('click', resetFileUI);
+
+  // ── Form submit ───────────────────────────────────────────────────────────
+  const uploadForm = document.getElementById('uploadForm');
+  if (uploadForm) {
+    uploadForm.addEventListener('submit', function (e) {
+      if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        e.preventDefault();
+        showErrorToast('Please select a resume file before submitting.');
+        dropzone.classList.remove('d-none');
+        filePreviewCard.classList.add('d-none');
+        return;
+      }
+
+      // ── Multi-phase progress spinner ───────────────────────────────────────
+      const ext          = getFileExt(fileInput.files[0].name);
+      const needsConvert = IMAGE_TYPES.includes(ext) || ext === '.pdf';
+
+      const btnText      = submitBtn.querySelector('.btn-text');
+      const phaseUpload  = document.getElementById('phaseUpload');
+      const phaseConvert = document.getElementById('phaseConvert');
+      const phaseAnalyse = document.getElementById('phaseAnalyse');
+
+      function showPhase(el) {
+        [btnText, phaseUpload, phaseConvert, phaseAnalyse].forEach(p => {
+          if (p) p.classList.add('d-none');
+        });
+        if (el) el.classList.remove('d-none');
+      }
+
+      showPhase(phaseUpload);
+      submitBtn.disabled = true;
+
+      if (needsConvert) {
+        // Phase 2 after 800 ms (form submitted, server receives file, starting conversion)
+        setTimeout(() => showPhase(phaseConvert), 800);
+        // Phase 3 after 4 s (conversion done, AI call starting)
+        setTimeout(() => showPhase(phaseAnalyse), 4000);
+      } else {
+        // DOCX / text PDF: skip conversion phase
+        setTimeout(() => showPhase(phaseAnalyse), 800);
+      }
+
+      sessionStorage.removeItem('rx_pending_file');
+    });
+  }
+
+})();
+</script>
 
 {% endblock %}

@@ -18,11 +18,21 @@ class ResumeUploadForm(forms.Form):
             'placeholder': 'e.g. Priya Sharma (optional – auto-detected)',
         })
     )
+    target_industry = forms.CharField(
+        label="Target Industry / Role",
+        max_length=100,
+        required=True,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'list': 'industryOptions',
+            'placeholder': 'e.g. Software Dev, Sales, Electrical Installation...',
+        })
+    )
     resume_file = forms.FileField(
         label="Upload Your Resume",
         widget=forms.FileInput(attrs={
             'class':  'form-control',
-            'accept': '.pdf,.docx',
+            'accept': '.pdf,.docx,.jpg,.jpeg,.png',
             'id':     'resumeFile',
         })
     )
@@ -36,18 +46,19 @@ class ResumeUploadForm(forms.Form):
         })
     )
 
+    ALLOWED_EXTENSIONS = ('.pdf', '.docx', '.jpg', '.jpeg', '.png')
+
     def clean_resume_file(self):
         f = self.cleaned_data.get('resume_file')
         if f:
             name = f.name.lower()
-            if not (name.endswith('.pdf') or name.endswith('.docx')):
+            if not any(name.endswith(ext) for ext in self.ALLOWED_EXTENSIONS):
                 raise forms.ValidationError(
-                    "Only PDF and DOCX files are supported. "
-                    "Please upload a file in one of those formats."
+                    "Only PDF, DOCX, JPG, and PNG files are supported."
                 )
-            if f.size > 5 * 1024 * 1024:   # 5 MB
+            if f.size > 50 * 1024 * 1024:   # 50 MB
                 raise forms.ValidationError(
-                    "File is too large. Maximum allowed size is 5 MB."
+                    "File is too large. Maximum allowed size is 50 MB."
                 )
         return f
 

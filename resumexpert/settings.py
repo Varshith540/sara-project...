@@ -119,10 +119,23 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ---------------------------------------------------------------------------
 # File upload settings
 # ---------------------------------------------------------------------------
-FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024   # 5 MB
-DATA_UPLOAD_MAX_MEMORY_SIZE  = 5 * 1024 * 1024   # 5 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800   # 50 MB
+DATA_UPLOAD_MAX_MEMORY_SIZE  = 52428800   # 50 MB
 
 # ---------------------------------------------------------------------------
 # Gemini AI
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+
+# ---------------------------------------------------------------------------
+# OpenRouter AI — Tier-3 (NVIDIA Nemotron — final fallback)
+# ---------------------------------------------------------------------------
+OPENROUTER_API_KEY  = os.getenv('OPENROUTER_API_KEY', '')
+OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
+OPENROUTER_MODEL    = 'meta-llama/llama-3.3-70b-instruct:free'
+
+# ---------------------------------------------------------------------------
+# OpenRouter AI — Tier-2 (Google Gemma 4 via OpenRouter — secondary backup)
+# ---------------------------------------------------------------------------
+OPENROUTER_SECONDARY_KEY   = os.getenv('OPENROUTER_SECONDARY_KEY', '')
+OPENROUTER_SECONDARY_MODEL = 'google/gemma-3-27b-it'   # Gemma 4 31B OpenRouter slug

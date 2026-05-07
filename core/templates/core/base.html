@@ -21,68 +21,221 @@
 </head>
 <body>
 
-<!-- ========== NAVBAR ========== -->
-<nav class="navbar navbar-expand-lg rx-navbar sticky-top">
-  <div class="container">
-    <a class="navbar-brand" href="{% url 'upload' %}">
-      <i class="bi bi-file-earmark-person-fill me-2"></i>ResumeXpert
-    </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
-            data-bs-target="#navbarNav" aria-controls="navbarNav"
-            aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="navbarNav">
-      <ul class="navbar-nav ms-auto align-items-center gap-2">
-        <li class="nav-item">
-          <a class="nav-link {% if request.resolver_match.url_name == 'upload' %}active{% endif %}"
-             href="{% url 'upload' %}">
-            <i class="bi bi-upload me-1"></i>Analyse Resume
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.resolver_match.url_name == 'history' %}active{% endif %}"
-             href="{% url 'history' %}">
-            <i class="bi bi-clock-history me-1"></i>History
-          </a>
-        </li>
-      </ul>
+<!-- ========== SIDEBAR ========== -->
+<aside class="sidebar-wrapper d-flex flex-column p-3 bg-dark text-white shadow-lg" style="width: 260px; position: fixed; top: 0; bottom: 0; left: 0; z-index: 1000; overflow-y: auto;">
+  <a href="{% url 'upload' %}" class="d-flex align-items-center mb-4 text-white text-decoration-none">
+    <i class="bi bi-file-earmark-person-fill fs-3 me-2 text-primary"></i>
+    <span class="fs-4 fw-bold tracking-tight">ResumeXpert</span>
+  </a>
+  <ul class="nav nav-pills flex-column mb-auto gap-2">
+    <li class="nav-item">
+      <a href="{% url 'upload' %}" class="nav-link text-white d-flex align-items-center {% if request.resolver_match.url_name == 'upload' %}active{% endif %}">
+        <i class="bi bi-chat-square-text fs-5 me-3"></i>New Chat
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'resume_builder' %}" class="nav-link text-white d-flex align-items-center {% if request.resolver_match.url_name == 'resume_builder' %}active{% endif %}">
+        <i class="bi bi-stars fs-5 me-3 text-warning"></i>AI Builder
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'history' %}" class="nav-link text-white d-flex align-items-center {% if request.resolver_match.url_name == 'history' %}active{% endif %}">
+        <i class="bi bi-clock-history fs-5 me-3"></i>History
+      </a>
+    </li>
+    <li class="mt-4">
+      {% if result %}
+      <a href="{% url 'exam' result.pk %}" class="nav-link text-white d-flex align-items-center justify-content-center" style="background-color: #ff6b00; border-radius: 8px;">
+        <i class="bi bi-journal-check me-2"></i>Test Your Skills
+      </a>
+      {% else %}
+      <a href="{% url 'history' %}" class="nav-link text-white d-flex align-items-center justify-content-center" style="background-color: #ff6b00; border-radius: 8px;" onclick="alert('Please select a resume analysis from your history to take a skill test!');">
+        <i class="bi bi-journal-check me-2"></i>Test Your Skills
+      </a>
+      {% endif %}
+    </li>
+  </ul>
+  
+  <div class="mt-auto">
+    <!-- Status Badge -->
+    <div class="status-indicator d-flex align-items-center gap-2 mb-3 p-2 rounded" style="background: rgba(255,255,255,0.05);">
+      <div class="spinner-grow spinner-grow-sm text-success" role="status" style="width: 12px; height: 12px;"></div>
+      <span class="small text-white-50 fw-semibold" style="font-size: 0.8rem;">
+        {% if result and result.active_ai_model %}
+          Status: {{ result.active_ai_model }}
+        {% else %}
+          Status: Online (Sri AI)
+        {% endif %}
+      </span>
+    </div>
+
     </div>
   </div>
-</nav>
-
-<!-- ========== MESSAGES ========== -->
-{% if messages %}
-<div class="container mt-3">
-  {% for msg in messages %}
-  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show shadow-sm" role="alert">
-    <i class="bi bi-info-circle me-2"></i>{{ msg }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</aside>
   </div>
-  {% endfor %}
-</div>
-{% endif %}
+</aside>
 
-<!-- ========== MAIN CONTENT ========== -->
-<main class="rx-main">
-  {% block content %}{% endblock %}
-</main>
+<!-- ========== MAIN CONTAINER ========== -->
+<div class="main-container" style="margin-left: 260px; display: flex; flex-direction: column; min-height: 100vh;">
+  <!-- ========== MESSAGES ========== -->
+  {% if messages %}
+  <div class="container mt-3">
+    {% for msg in messages %}
+    <div class="alert alert-{{ msg.tags }} alert-dismissible fade show shadow-sm" role="alert">
+      <i class="bi bi-info-circle me-2"></i>{{ msg }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ========== MAIN CONTENT ========== -->
+  <main class="rx-main flex-grow-1 p-4">
+    {% block content %}{% endblock %}
+  </main>
 
 <!-- ========== FOOTER ========== -->
-<footer class="rx-footer">
+<footer class="rx-footer mt-auto py-3 bg-light">
   <div class="container text-center">
-    <p class="mb-0">
+    <p class="mb-0 text-muted small">
       <i class="bi bi-robot me-1"></i>
-      <strong>ResumeXpert</strong> &mdash; AI-Powered Resume Analyser &nbsp;|&nbsp;
-      Built with Django &amp; Scikit-learn
+      <strong>ResumeXpert</strong> &mdash; AI-Powered Resume Analyser &nbsp;|&nbsp; Built with Django &amp; Gemini
     </p>
   </div>
 </footer>
+</div> <!-- Close main-container -->
 
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <!-- Custom JS -->
 <script src="{% static 'js/main.js' %}"></script>
+
+<!-- ========== AI CHAT WINDOW ========== -->
+<div id="aiChatContainer" class="shadow-lg bg-white rounded-4" style="position:fixed; bottom:30px; right:30px; z-index:1000; width: 350px; height: 500px; display: none; flex-direction: column; border: 1px solid #e5e7eb; overflow: hidden;">
+  
+  <!-- Header -->
+  <div class="bg-dark text-white p-3 d-flex justify-content-between align-items-center">
+    <div>
+      <strong><i class="bi bi-stars text-warning me-2"></i>Sri AI</strong>
+      <div class="small text-white-50" style="font-size: 0.75rem;">Your AI Career Agent</div>
+    </div>
+    <button class="btn text-white btn-sm p-0 m-0" onclick="toggleAiChat()"><i class="bi bi-x-lg"></i></button>
+  </div>
+  
+  <!-- Chat History -->
+  <div id="chatHistory" class="p-3 flex-grow-1" style="overflow-y: auto; background-color: #f9fafb; font-size: 0.9rem;">
+    <!-- Default Message -->
+    <div class="d-flex mb-3">
+      <div class="bg-white border rounded-3 p-2 shadow-sm" style="max-width: 85%;">
+        Hi! I'm Sri AI. Let me help you optimize your resume! What would you like to improve today?
+      </div>
+    </div>
+  </div>
+  
+  <!-- Input Area -->
+  <div class="p-2 bg-white border-top">
+    <div class="input-group">
+      <input type="text" id="chatInput" class="form-control shadow-none border-0 bg-light rounded-start-pill px-3" placeholder="Ask Sri AI..." onkeypress="if(event.key === 'Enter') sendChatMessage()">
+      <button class="btn btn-light bg-light rounded-end-pill text-primary px-3" type="button" onclick="sendChatMessage()">
+        <i class="bi bi-send-fill"></i>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Chat Toggle Button -->
+<button id="chatToggleBtn" onclick="toggleAiChat()" class="btn btn-primary rounded-circle shadow-lg d-flex align-items-center justify-content-center transition" style="position:fixed; bottom:30px; right:30px; z-index:999; width:60px; height:60px; font-size:1.5rem; background:linear-gradient(135deg,#7c3aed,#4338ca); border:none;">
+  <i class="bi bi-chat-dots-fill"></i>
+</button>
+
+<script>
+  function toggleAiChat() {
+    const container = document.getElementById('aiChatContainer');
+    const btn = document.getElementById('chatToggleBtn');
+    if (container.style.display === 'none' || container.style.display === '') {
+      container.style.display = 'flex';
+      btn.style.display = 'none';
+      setTimeout(() => document.getElementById('chatInput').focus(), 100);
+    } else {
+      container.style.display = 'none';
+      btn.style.display = 'flex';
+    }
+  }
+
+  function appendMessage(sender, text) {
+    const history = document.getElementById('chatHistory');
+    const msgDiv = document.createElement('div');
+    msgDiv.className = sender === 'user' ? 'd-flex mb-3 justify-content-end' : 'd-flex mb-3';
+    
+    const bubble = document.createElement('div');
+    bubble.className = sender === 'user' 
+        ? 'bg-primary text-white rounded-3 p-2 shadow-sm' 
+        : 'bg-white border rounded-3 p-2 shadow-sm';
+    bubble.style.maxWidth = '85%';
+    bubble.innerHTML = text.replace(/\n/g, '<br>');
+    
+    msgDiv.appendChild(bubble);
+    history.appendChild(msgDiv);
+    history.scrollTop = history.scrollHeight;
+  }
+
+  function sendChatMessage() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text) return;
+    
+    input.value = '';
+    appendMessage('user', text);
+    
+    // Show loading
+    const history = document.getElementById('chatHistory');
+    const loadingId = 'loading-' + Date.now();
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = loadingId;
+    loadingDiv.className = 'd-flex mb-3 text-muted small';
+    loadingDiv.innerHTML = '<div class="bg-white border rounded-3 p-2 shadow-sm">Sri AI is thinking... <span class="spinner-border spinner-border-sm ms-2"></span></div>';
+    history.appendChild(loadingDiv);
+    history.scrollTop = history.scrollHeight;
+    
+    fetch('/api/chat/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({ message: text })
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById(loadingId).remove();
+        if(data.reply) {
+            appendMessage('bot', data.reply);
+        } else {
+            appendMessage('bot', 'Sorry, I encountered an error.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById(loadingId).remove();
+        appendMessage('bot', 'Network error occurred. Falling back to Gemma local backup may have failed.');
+    });
+  }
+
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+  }
+</script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>

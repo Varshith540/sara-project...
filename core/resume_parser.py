@@ -1,10 +1,18 @@
 """
 ResumeXpert – Resume Parser
-Extracts raw text, name, email, and phone from PDF / DOCX resumes.
+Extracts raw text, name, email, and phone from PDF / DOCX / Image resumes.
+
+PDF strategy (cascade, stops at first success):
+  1. PyPDF2  – fast, handles most modern PDFs
+  2. pdfplumber – richer extraction, handles tricky layouts
+  3. pdfminer.six – deepest extraction, slowest but most compatible
 """
 
 import re
 import os
+
+# Sentinel returned for image files so the caller knows to use Vision AI
+IMAGE_FILE_SENTINEL = "__IMAGE_FILE__"
 
 
 # ---------------------------------------------------------------------------
@@ -13,34 +21,78 @@ import os
 def extract_text(file_path: str) -> str:
     """
     Return raw text from a resume file.
-    Supports .pdf and .docx.
+    Supports .pdf, .docx, .jpg, .jpeg, .png.
+
+    For image files returns IMAGE_FILE_SENTINEL — the caller must
+    route those to the Gemini Vision endpoint instead.
     """
     ext = os.path.splitext(file_path)[1].lower()
     if ext == '.pdf':
         return _extract_pdf(file_path)
     elif ext == '.docx':
         return _extract_docx(file_path)
+    elif ext in ('.jpg', '.jpeg', '.png'):
+        print(f"[ResumeParser] Image file detected: {file_path} — routing to Vision AI.")
+        return IMAGE_FILE_SENTINEL
     else:
         return ""
 
 
 # ---------------------------------------------------------------------------
-# PDF extraction
+# PDF extraction  — 3-library cascade
 # ---------------------------------------------------------------------------
 def _extract_pdf(path: str) -> str:
+    text = ""
+
+    # ── Library 1: PyPDF2 ────────────────────────────────────────────────────
     try:
         import PyPDF2
-        text = ""
         with open(path, 'rb') as f:
             reader = PyPDF2.PdfReader(f)
             for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
-        return text.strip()
+                page_text = page.extract_text() or ""
+                text += page_text + "\n"
+        text = text.strip()
+        if text:
+            print(f"[ResumeParser] PDF parsed successfully with PyPDF2 ({len(text)} chars).")
+            return text
+        print("[ResumeParser] PyPDF2 returned empty — trying pdfplumber.")
     except Exception as e:
-        print(f"[ResumeParser] PDF error: {e}")
-        return ""
+        print(f"[ResumeParser] PyPDF2 failed: {e} — trying pdfplumber.")
+
+    # ── Library 2: pdfplumber ────────────────────────────────────────────────
+    try:
+        import pdfplumber
+        with pdfplumber.open(path) as pdf:
+            pages_text = []
+            for page in pdf.pages:
+                pg_text = page.extract_text()
+                if pg_text:
+                    pages_text.append(pg_text)
+        text = "\n".join(pages_text).strip()
+        if text:
+            print(f"[ResumeParser] PDF parsed successfully with pdfplumber ({len(text)} chars).")
+            return text
+        print("[ResumeParser] pdfplumber returned empty — trying pdfminer.")
+    except ImportError:
+        print("[ResumeParser] pdfplumber not installed — trying pdfminer.")
+    except Exception as e:
+        print(f"[ResumeParser] pdfplumber failed: {e} — trying pdfminer.")
+
+    # ── Library 3: pdfminer.six ──────────────────────────────────────────────
+    try:
+        from pdfminer.high_level import extract_text as pdfminer_extract
+        text = pdfminer_extract(path).strip()
+        if text:
+            print(f"[ResumeParser] PDF parsed successfully with pdfminer ({len(text)} chars).")
+            return text
+        print("[ResumeParser] pdfminer also returned empty — PDF appears to be image-based.")
+    except ImportError:
+        print("[ResumeParser] pdfminer not installed.")
+    except Exception as e:
+        print(f"[ResumeParser] pdfminer failed: {e}")
+
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +109,9 @@ def _extract_docx(path: str) -> str:
                 for cell in row.cells:
                     if cell.text.strip():
                         paragraphs.append(cell.text.strip())
-        return "\n".join(paragraphs).strip()
+        text = "\n".join(paragraphs).strip()
+        print(f"[ResumeParser] DOCX parsed successfully ({len(text)} chars).")
+        return text
     except Exception as e:
         print(f"[ResumeParser] DOCX error: {e}")
         return ""
@@ -73,14 +127,85 @@ def extract_email(text: str) -> str:
     return match.group() if match else ""
 
 
+def sanitise_extracted_phone(phone: str) -> str:
+    """
+    Validate that a candidate phone string is not actually a date range or year.
+
+    Rejection rules:
+      R1 – Year-range pattern  : YYYY-YYYY or YYYY–YYYY  (e.g. 2020-2022)
+      R2 – Standalone year     : any 4-digit value 1900-2099
+      R3 – Too few digits      : fewer than 7 numeric digits
+      R4 – Contains letters    : real phone numbers do not contain a-z
+
+    Returns the original phone if it passes all checks, else ''.
+    """
+    if not phone:
+        return ''
+
+    # R1: year-range pattern
+    if re.search(r'\b(19|20)\d{2}\s*[-\u2013\u2014]\s*(19|20)\d{2}\b', phone):
+        print(f'[PhoneGuard] Rejected year-range: {phone!r}')
+        return ''
+
+    # R2: standalone 4-digit calendar year
+    if re.search(r'\b(19|20)\d{2}\b', phone):
+        print(f'[PhoneGuard] Rejected year-containing value: {phone!r}')
+        return ''
+
+    # R3: digit count
+    digits_only = re.sub(r'\D', '', phone)
+    if len(digits_only) < 7:
+        print(f'[PhoneGuard] Rejected too-short value: {phone!r}')
+        return ''
+
+    # R4: alphabetic characters (dates like "Jan 2021" would be caught by R2,
+    #     but catch any remaining word characters just in case)
+    if re.search(r'[a-zA-Z]', phone):
+        print(f'[PhoneGuard] Rejected alpha-containing value: {phone!r}')
+        return ''
+
+    return phone
+
+
 def extract_phone(text: str) -> str:
-    """Return the first phone number found in the text."""
-    pattern = r'(\+?\d[\d\s\-().]{8,}\d)'
-    match = re.search(pattern, text)
-    if match:
-        phone = re.sub(r'\s+', ' ', match.group()).strip()
-        return phone[:20]
-    return ""
+    """
+    Return the first valid phone number found in the text.
+
+    Strategy:
+      1. Pre-screen each line — skip lines that look like date ranges.
+      2. Apply a phone-specific regex (requires 7-15 digits, standard separators).
+      3. Post-validate with sanitise_extracted_phone() before returning.
+    """
+    # Lines that look like year ranges or education/experience dates are skipped
+    _DATE_LINE = re.compile(
+        r'\b(19|20)\d{2}\s*[-\u2013\u2014]\s*((19|20)\d{2}|present|current|now|till)\b',
+        re.IGNORECASE,
+    )
+
+    # Strict phone pattern: starts with optional +, 7–15 digits, standard separators only
+    _PHONE_RE = re.compile(
+        r'(?<![0-9])(\+?[\d]{1,3}[\s\-.])?'   # optional country code
+        r'(\(?\d{2,4}\)?[\s\-.])'              # area code
+        r'(\d{3,4}[\s\-.])'                    # exchange
+        r'(\d{3,4})'                            # subscriber
+        r'(?![0-9])'
+    )
+
+    for line in text.split('\n'):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Skip lines that are clearly date ranges
+        if _DATE_LINE.search(stripped):
+            continue
+        m = _PHONE_RE.search(stripped)
+        if m:
+            candidate = re.sub(r'\s+', ' ', m.group()).strip()
+            validated = sanitise_extracted_phone(candidate)
+            if validated:
+                return validated[:20]
+
+    return ''
 
 
 def extract_name(text: str) -> str:

@@ -12,12 +12,12 @@
     </h2>
     <p class="text-muted">
       Candidate: <strong>{{ result.resume.name }}</strong> &nbsp;·&nbsp;
-      <strong>{{ total }}</strong> questions based on your matched skills
+      <strong>{{ total }}</strong> questions &nbsp;·&nbsp;
+      Level: <span class="badge bg-secondary">{{ difficulty }}</span>
     </p>
-    <!-- Timer -->
     <div class="rx-timer-badge" id="examTimer">
       <i class="bi bi-clock me-1"></i>
-      <span id="timerDisplay">20:00</span>
+      <span id="timerDisplay">30:00</span>
     </div>
   </div>
 
@@ -62,7 +62,8 @@
               name="q_{{ forloop.parentloop.counter0 }}"
               id="q{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}"
               value="{{ forloop.counter0 }}"
-              onchange="onAnswerSelect({{ forloop.parentloop.counter0 }})"
+              data-qidx="{{ forloop.parentloop.counter0 }}"
+              onchange="onAnswerSelect(parseInt(this.dataset.qidx, 10))"
             >
             <span class="rx-option-letter">{{ forloop.counter0|letter }}</span>
             <span class="rx-option-text">{{ option }}</span>
@@ -110,7 +111,7 @@
 
 {% block extra_js %}
 <script>
-  const TOTAL = {{ total }};
+  const TOTAL = parseInt("{{ total }}", 10) || 0;
   const answered = new Set();
 
   // ── Track answered questions ─────────────────────────────────────────
@@ -163,7 +164,7 @@
   }
 
   // ── Countdown Timer ──────────────────────────────────────────────────
-  let seconds = 20 * 60;  // 20 minutes
+  let seconds = 30 * 60;  // 30 minutes
   const timerEl = document.getElementById('timerDisplay');
 
   function tick() {

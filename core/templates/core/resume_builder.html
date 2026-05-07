@@ -1,0 +1,99 @@
+{% extends "core/base.html" %}
+{% block title %}AI Resume Builder | ResumeXpert{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      
+      <div class="text-center mb-4">
+        <h2 class="fw-800" style="background:linear-gradient(90deg,#7c3aed,#f59e0b);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">
+          ✨ AI Resume Builder
+        </h2>
+        <p class="text-muted fs-5">Fill in your details below and Gemini AI will generate a professional, ATS-optimized resume from scratch.</p>
+      </div>
+
+      <div class="rx-card p-4 p-md-5">
+        <form method="POST" id="builderForm">
+          {% csrf_token %}
+          
+          <h5 class="fw-700 mb-3 text-primary"><i class="bi bi-person me-2"></i>Personal Info</h5>
+          <div class="row g-3 mb-4">
+            <div class="col-md-12">
+              <label class="form-label fw-600">Full Name</label>
+              <input type="text" name="name" class="form-control" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-600">Email Address</label>
+              <input type="email" name="email" class="form-control" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-600">Phone Number (Optional)</label>
+              <input type="text" name="phone" class="form-control">
+            </div>
+          </div>
+
+          <h5 class="fw-700 mb-3 text-primary"><i class="bi bi-briefcase me-2"></i>Target Role</h5>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label fw-600">Target Job Title</label>
+              <input type="text" name="job_title" class="form-control" placeholder="e.g. Frontend Developer" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-600">Industry / Sector</label>
+              <select name="sector" class="form-select" required>
+                <option value="IT / Software">IT / Software</option>
+                <option value="Healthcare">Healthcare</option>
+                <option value="Finance">Finance</option>
+                <option value="Marketing">Marketing</option>
+                <option value="Engineering">Engineering</option>
+                <option value="Design">Design</option>
+                <option value="Education">Education</option>
+                <option value="Hospitality">Hospitality</option>
+                <option value="General">Other / General</option>
+              </select>
+            </div>
+          </div>
+
+          <h5 class="fw-700 mb-3 text-primary"><i class="bi bi-card-checklist me-2"></i>Experience & Skills</h5>
+          <div class="mb-3">
+            <label class="form-label fw-600">Experience Level</label>
+            <select name="experience" class="form-select" required>
+              <option value="Fresher / Entry Level">Fresher / Entry Level (0-1 years)</option>
+              <option value="Junior">Junior (1-3 years)</option>
+              <option value="Mid-Level">Mid-Level (3-5 years)</option>
+              <option value="Senior">Senior (5+ years)</option>
+            </select>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label fw-600">Key Skills (Comma separated)</label>
+            <input type="text" name="skills" class="form-control" placeholder="e.g. Python, React, Project Management" required>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label fw-600">Background Summary</label>
+            <textarea name="summary" class="form-control" rows="5" placeholder="Briefly describe what you've done, your degree, and any key projects or achievements. AI will turn this into professional bullet points..." required></textarea>
+            <div class="form-text">Don't worry about perfect grammar — Gemini will fix it and make it sound highly professional.</div>
+          </div>
+
+          <div class="text-center mt-4">
+            <button type="submit" class="btn btn-warning btn-lg fw-700 px-5 w-100" id="buildBtn" style="border-radius:50px;">
+              ✨ Generate My Resume Now
+            </button>
+          </div>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('builderForm').addEventListener('submit', function() {
+  const btn = document.getElementById('buildBtn');
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sri AI is double-checking your resume for ATS perfection...';
+  btn.disabled = true;
+});
+</script>
+{% endblock %}

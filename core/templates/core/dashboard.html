@@ -1,6 +1,27 @@
 {% extends "core/base.html" %}
 {% block title %}Dashboard – {{ resume.name }} | ResumeXpert{% endblock %}
 
+{% block extra_head %}
+<style>
+/* Skill Test Popup Animation */
+@keyframes popupPulse {
+  0% { transform: scale(0.95); opacity: 0; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.skill-test-popup {
+  animation: popupPulse 0.6s ease-out forwards;
+  box-shadow: 0 10px 25px rgba(124, 58, 237, 0.3);
+  border: 1px solid rgba(124, 58, 237, 0.4);
+  z-index: 1000;
+  display: none;
+}
+.skill-test-popup.show {
+  display: block;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container py-5">
 
@@ -17,11 +38,23 @@
       </p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-      <a href="{% url 'exam' result.pk %}" class="btn rx-btn-primary">
-        <i class="bi bi-journal-check me-1"></i>Take Skill Exam
-      </a>
+      <div class="dropdown">
+        <button class="btn rx-btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+          <i class="bi bi-journal-check me-1"></i>Take Skill Exam
+        </button>
+        <ul class="dropdown-menu border-0 shadow-sm" style="border-radius:12px;overflow:hidden;">
+          <li><h6 class="dropdown-header text-uppercase small fw-700">Select Difficulty</h6></li>
+          <li><a class="dropdown-item py-2" href="{% url 'exam' result.pk %}?difficulty=Beginner"><i class="bi bi-star me-2 text-success"></i>Beginner</a></li>
+          <li><a class="dropdown-item py-2" href="{% url 'exam' result.pk %}?difficulty=Intermediate"><i class="bi bi-star-half me-2 text-warning"></i>Intermediate</a></li>
+          <li><a class="dropdown-item py-2" href="{% url 'exam' result.pk %}?difficulty=Advanced"><i class="bi bi-star-fill me-2 text-danger"></i>Advanced</a></li>
+        </ul>
+      </div>
       {% if gemini_available %}
+      <a href="{% url 'company_analysis' result.pk %}" class="btn btn-outline-primary" style="background:#f8fafc;">
+        <i class="bi bi-buildings me-1"></i>Analyse Company
+      </a>
       <a href="{% url 'generate_resume' result.pk %}" class="btn btn-warning fw-600"
+         onclick="showGeneratingOverlay(event, this.href)"
          style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#fff;">
         <i class="bi bi-stars me-1"></i>✨ Generate AI Resume
       </a>
@@ -34,6 +67,61 @@
       </a>
     </div>
   </div>
+
+  <!-- ── AI Resume Highlight Banner ──────────────────────────────────── -->
+  {% if gemini_available %}
+  <div class="mb-4 p-4 rounded-4 d-flex flex-wrap align-items-center justify-content-between gap-3"
+       style="background:linear-gradient(135deg,#1e1b4b 0%,#4338ca 50%,#7c3aed 100%);
+              box-shadow:0 8px 32px rgba(99,102,241,0.4);position:relative;overflow:hidden;">
+    <div style="position:absolute;top:-30px;right:-30px;width:160px;height:160px;
+                border-radius:50%;background:rgba(255,255,255,0.07);pointer-events:none;"></div>
+    <div style="position:absolute;bottom:-20px;left:35%;width:100px;height:100px;
+                border-radius:50%;background:rgba(255,255,255,0.05);pointer-events:none;"></div>
+    <div class="d-flex align-items-center gap-3" style="position:relative;z-index:1;">
+      <div style="font-size:2.4rem;animation:ai-spin 4s linear infinite;display:inline-block;">✨</div>
+      <div>
+        <div style="color:#fff;font-weight:800;font-size:1.1rem;line-height:1.3;">
+          AI Resume Generator is Ready!
+        </div>
+        <div style="color:rgba(255,255,255,0.78);font-size:.875rem;margin-top:2px;">
+          Gemini AI rewrites your resume to score <strong style="color:#fcd34d;">30%+ higher</strong>
+          — with 3 beautiful Canva-style templates &amp; PDF download.
+        </div>
+      </div>
+    </div>
+    <a href="{% url 'generate_resume' result.pk %}"
+       id="aiResumeBtn"
+       class="btn btn-lg fw-700 px-4 py-2"
+       onclick="showGeneratingOverlay(event, this.href)"
+       style="background:#fbbf24;color:#1e1b4b;border:none;border-radius:50px;
+              box-shadow:0 4px 20px rgba(251,191,36,0.55);font-size:.95rem;
+              white-space:nowrap;position:relative;z-index:1;">
+      ✨ Generate My AI Resume →
+    </a>
+  </div>
+  
+  <!-- Full Screen Loading Overlay -->
+  <div id="generatingOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(30, 27, 75, 0.9); z-index:9999; flex-direction:column; align-items:center; justify-content:center; color:#fff;">
+    <div class="spinner-border text-warning mb-3" style="width: 3rem; height: 3rem;" role="status"></div>
+    <h4 class="fw-bold mb-2">Sri AI is working...</h4>
+    <p class="text-white-50" style="font-size:1.1rem;">Sri AI is double-checking your resume for ATS perfection...</p>
+  </div>
+  
+  <script>
+    function showGeneratingOverlay(e, url) {
+      e.preventDefault();
+      document.getElementById('generatingOverlay').style.display = 'flex';
+      setTimeout(() => {
+        window.location.href = url;
+      }, 500); // small delay to let UI update
+    }
+  </script>
+
+  <style>
+    @keyframes ai-spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+    #aiResumeBtn:hover { transform:scale(1.05); box-shadow:0 6px 28px rgba(251,191,36,0.75) !important; transition:.2s; }
+  </style>
+  {% endif %}
 
   <!-- ── ATS Score Hero ─────────────────────────────────────────────── -->
   <div class="rx-score-hero mb-4">
@@ -71,7 +159,7 @@
                 <div class="rx-metric-value text-success">{{ result.skill_match_score }}%</div>
                 <div class="rx-metric-label">Skill Match</div>
                 <div class="progress mt-1" style="height:6px;">
-                  <div class="progress-bar bg-success" style="width:{{ result.skill_match_score }}%"></div>
+                  <div class="progress-bar bg-success" style="width: 0%;" data-width="{{ result.skill_match_score }}"></div>
                 </div>
                 <div class="mt-1">
                   {% if result.matched_skills|length == 0 and result.missing_skills|length == 0 %}
@@ -97,7 +185,7 @@
                 <div class="rx-metric-value text-info">{{ result.cosine_score }}%</div>
                 <div class="rx-metric-label">Content Relevance</div>
                 <div class="progress mt-1" style="height:6px;">
-                  <div class="progress-bar bg-info" style="width:{{ result.cosine_score }}%"></div>
+                  <div class="progress-bar bg-info" style="width: 0%;" data-width="{{ result.cosine_score }}"></div>
                 </div>
                 <div class="mt-1">
                   {% if result.cosine_score >= 60 %}
@@ -136,6 +224,18 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+  <!-- ── Extracted Content Indicator ─────────────────────────────────── -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="rx-card p-4 border-start border-4 border-info">
+        <h6 class="fw-bold mb-2">
+          <i class="bi bi-file-text text-info me-2"></i>Extracted Resume Content
+        </h6>
+        <p class="small text-muted mb-2">This is the raw text our AI successfully extracted from your document.</p>
+        <div class="bg-light p-3 rounded" style="max-height: 150px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; border: 1px solid #e2e8f0; white-space: pre-wrap;">{{ result.resume.raw_text }}</div>
       </div>
     </div>
   </div>
@@ -202,9 +302,27 @@
     <!-- All Skills Detected -->
     <div class="col-md-6">
       <div class="rx-card h-100 p-4">
-        <h5 class="fw-700 mb-3">
+        <h5 class="fw-700 mb-3 position-relative">
           <i class="bi bi-tags-fill text-primary me-2"></i>All Skills Detected
           <span class="badge bg-primary ms-2">{{ result.resume_skills|length }}</span>
+          
+          <!-- Animated Popup -->
+          {% if result.resume_skills %}
+          <div id="skillTestPopup" class="skill-test-popup position-absolute bg-white rounded-3 p-3 text-dark" style="top: -60px; right: 0; width: 220px;">
+            <button type="button" class="btn-close position-absolute top-0 end-0 m-2" style="font-size: 0.6rem;" onclick="document.getElementById('skillTestPopup').style.display='none'"></button>
+            <h6 class="fw-bold mb-1" style="color: #7c3aed; font-size: 0.8rem;"><i class="bi bi-rocket-takeoff me-1"></i>Boost Hireability!</h6>
+            <p class="mb-2 text-wrap fw-normal" style="font-size: 0.7rem; line-height: 1.3;">We found a few gaps! Take a quick skill test to validate your <strong>{{ result.resume_skills.0 }}</strong> expertise and prove it to recruiters.</p>
+            <a href="{% url 'exam' result.id %}" class="btn btn-sm btn-primary w-100" style="font-size: 0.7rem; padding: 4px;">Take Test Now</a>
+          </div>
+          <script>
+            setTimeout(() => {
+              document.getElementById('skillTestPopup').classList.add('show');
+              setTimeout(() => {
+                  document.getElementById('skillTestPopup').classList.remove('show');
+              }, 5000); // Hide after 5 seconds
+            }, 2000); // Show after 2 seconds
+          </script>
+          {% endif %}
         </h5>
         {% if result.resume_skills %}
         <div class="d-flex flex-wrap gap-2">
@@ -228,7 +346,60 @@
       </div>
     </div>
 
+    </div>
+
   </div>
+
+  <!-- ── Trending Skills ────────────────────────────────────────────── -->
+  {% if gemini_available %}
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="rx-card p-4" style="background:linear-gradient(135deg,#f0fdfa,#ccfbf1);border-left:4px solid #0d9488;">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h5 class="fw-700 mb-0" style="color:#0f766e;">
+            <i class="bi bi-graph-up-arrow me-2"></i>Trending Skills in your Sector
+          </h5>
+          <button id="loadTrendsBtn" class="btn btn-sm btn-outline-teal" style="border-color:#0d9488;color:#0d9488;background:transparent;" onclick="loadTrendingSkills()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Load Trends
+          </button>
+        </div>
+        <div id="trendingSkillsContainer">
+          <p class="text-muted small mb-0">Click 'Load Trends' to ask Gemini AI for the hottest skills right now.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    function loadTrendingSkills() {
+      const btn = document.getElementById('loadTrendsBtn');
+      const container = document.getElementById('trendingSkillsContainer');
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Loading...';
+      btn.disabled = true;
+      
+      fetch("{% url 'api_trending_skills' %}")
+        .then(response => response.json())
+        .then(data => {
+          if (data.skills && data.skills.length > 0) {
+            let html = '<div class="d-flex flex-wrap gap-2">';
+            data.skills.forEach(skill => {
+              html += `<span class="badge" style="background:#0f766e;color:#fff;font-size:.85rem;padding:6px 12px;">${skill}</span>`;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+          } else {
+            container.innerHTML = '<p class="text-danger small mb-0">Could not load trending skills at this time.</p>';
+          }
+          btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refresh';
+          btn.disabled = false;
+        })
+        .catch(error => {
+          container.innerHTML = '<p class="text-danger small mb-0">Error loading trends.</p>';
+          btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Retry';
+          btn.disabled = false;
+        });
+    }
+  </script>
+  {% endif %}
 
   <!-- ── Suggestions ───────────────────────────────────────────────── -->
   {% if result.suggestions %}
@@ -267,7 +438,7 @@
     {% if result.ai_summary %}
     <!-- AI Job Fit Summary -->
     <div class="p-3 rounded mb-3" style="background:rgba(66,133,244,0.08); border:1px solid rgba(66,133,244,0.2);">
-      <p class="mb-0 fw-500" style="line-height:1.7;">{{ result.ai_summary }}</p>
+      <p class="mb-0 fw-500" style="line-height:1.7;">{{ result.ai_summary|safe }}</p>
     </div>
 
     <!-- AI-Powered Suggestions -->
@@ -281,6 +452,24 @@
         <div class="d-flex gap-2 p-2 rounded" style="background:#f8f9ff; border:1px solid #e8eeff;">
           <span style="color:#4285f4; font-size:1rem; flex-shrink:0;">✦</span>
           <span style="font-size:0.9rem;">{{ tip }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Potential Interview Questions -->
+    {% if result.interview_questions %}
+    <hr style="border-color:rgba(66,133,244,0.2); margin: 24px 0;">
+    <h6 class="fw-700 mb-3" style="color:#4285f4;">
+      <i class="bi bi-mic-fill me-1"></i>Potential Interview Questions
+    </h6>
+    <div class="d-flex flex-column gap-2">
+      {% for question in result.interview_questions %}
+      <div class="p-3 rounded" style="background:#fff; border:1px solid #e8eeff; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+        <div class="d-flex gap-2">
+          <span class="fw-bold" style="color:#4285f4;">Q{{ forloop.counter }}.</span>
+          <span style="font-size:0.95rem; color:#1e293b;">{{ question }}</span>
         </div>
       </div>
       {% endfor %}
@@ -322,6 +511,36 @@
     </div>
   </div>
 
+  <!-- Progressive Nudging Toast -->
+  {% if result.missing_skills and result.attempts.count == 0 %}
+  <div class="position-fixed bottom-0 start-0 p-3" style="z-index: 1050; margin-bottom: 90px; margin-left: 20px;">
+    <div id="nudgeToast" class="toast align-items-center border-0 shadow-lg rounded-4" style="background-color: #ff6b00; color: white;" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="15000">
+      <div class="d-flex">
+        <div class="toast-body fw-bold d-flex align-items-center">
+          <i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i>
+          <div>
+            You mentioned {{ result.resume_skills.0|default:"several skills" }}, but haven't taken the assessment yet.
+            <br>
+            <a href="{% url 'exam' result.pk %}" class="btn btn-sm btn-light mt-2 fw-bold text-dark" style="border-radius: 12px;">Take Exam Now</a>
+          </div>
+        </div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      setTimeout(() => {
+        const toastEl = document.getElementById('nudgeToast');
+        if (toastEl) {
+          const toast = new bootstrap.Toast(toastEl);
+          toast.show();
+        }
+      }, 3000);
+    });
+  </script>
+  {% endif %}
+
 </div>
 {% endblock %}
 
@@ -329,6 +548,11 @@
 <script>
   // ── Score ring animation ─────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', function () {
+    // Apply progress bar widths
+    document.querySelectorAll('.progress-bar[data-width]').forEach(el => {
+      el.style.width = el.getAttribute('data-width') + '%';
+    });
+
     const fill = document.querySelector('.rx-ring-fill');
     if (fill) {
       const score = parseFloat(fill.closest('.rx-score-ring').dataset.score);
@@ -342,7 +566,7 @@
     }
 
     // ── Score breakdown bar chart ──────────────────────────────────────
-    const chartData = {{ chart_data|safe }};
+    const chartData = JSON.parse('{{ chart_data|escapejs }}');
   const ctx = document.getElementById('scoreChart');
   if (ctx) {
     new Chart(ctx, {
