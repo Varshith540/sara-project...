@@ -59,9 +59,9 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
       
-      // Strict 2MB Limit (Client-Side Validation)
-      if (file.size > 2 * 1024 * 1024) {
-        alert('File size too large. This is a beta version with a 2MB limit.');
+      // Optimized 30MB Limit (Client-Side Validation for Render Free Tier)
+      if (file.size > 30 * 1024 * 1024) {
+        alert('File size too large. This is a beta version with a 30MB capacity limit to ensure stability. Please compress your file.');
         fileInput.value = '';
         return;
       }

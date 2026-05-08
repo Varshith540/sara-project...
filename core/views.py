@@ -4,6 +4,7 @@ ResumeXpert – Views
 
 import json
 import os
+import gc
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import JsonResponse
@@ -46,9 +47,9 @@ def upload_resume(request):
             file_ext        = os.path.splitext(uploaded_file.name)[1].lower()
             is_image        = file_ext in ('.jpg', '.jpeg', '.png')
 
-            # ---- 2MB Strict Size Limit Check ----
-            if uploaded_file.size > 2 * 1024 * 1024:
-                messages.error(request, "⚠️ File size too large. This is a beta version with a 2MB limit.")
+            # ---- 30MB Dynamic Size Limit Check ----
+            if uploaded_file.size > 30 * 1024 * 1024:
+                messages.error(request, "⚠️ File size too large. This is a beta version with a 30MB capacity limit to ensure stability.")
                 return render(request, 'core/upload.html', {'form': form})
 
             # ---- Save resume record (so we get a file path) ----------------
@@ -140,6 +141,11 @@ def upload_resume(request):
                 active_ai_model   = gemini_data.get('active_model', 'Gemini'),
             )
             result.save()
+
+            # ---- Autonomous Memory Management -------------------------------
+            # Explicitly invoke garbage collection to immediately free RAM
+            # consumed by heavy PyMuPDF extraction or large image files
+            gc.collect()
 
             messages.success(request, "Resume analysed successfully! 🎉")
             return redirect('dashboard', pk=result.pk)
