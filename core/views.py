@@ -28,16 +28,18 @@ from .gemini_service import (
 # Home / Upload view
 # ---------------------------------------------------------------------------
 def upload_resume(request):
-    """Show the upload form and process submissions."""
+    """Show the upload form and process submissions via AJAX or standard POST."""
     if request.method == 'POST':
-        # ── Terminal audit — confirm file is reaching Django on every POST ──
-        _f = request.FILES.get('resume_file')
-        print("\n====== UPLOAD POST AUDIT ======")
-        print(f"  resume_file in FILES : {'resume_file' in request.FILES}")
-        print(f"  File name            : {_f.name if _f else 'N/A'}")
-        print(f"  File size (bytes)    : {_f.size if _f else 'N/A'}")
-        print(f"  POST keys            : {list(request.POST.keys())}")
-        print("================================\n")
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept', '')
+
+        # ── Pre-emptive Memory Guard ─────────────────────────────────────────
+        import psutil
+        if psutil.virtual_memory().percent > 80:
+            msg = "System Busy"
+            if is_ajax:
+                return JsonResponse({'status': 'MEM_LIMIT_REACHED', 'message': msg})
+            messages.error(request, f"⚠️ {msg}: Memory limit reached. Please try a smaller file or wait.")
+            return render(request, 'core/upload.html')
 
         form = ResumeUploadForm(request.POST, request.FILES)
         if form.is_valid():
@@ -49,7 +51,9 @@ def upload_resume(request):
 
             # ---- 30MB Dynamic Size Limit Check ----
             if uploaded_file.size > 30 * 1024 * 1024:
-                messages.error(request, "⚠️ File size too large. This is a beta version with a 30MB capacity limit to ensure stability.")
+                msg = "⚠️ File size too large. This is a beta version with a 30MB capacity limit to ensure stability."
+                if is_ajax: return JsonResponse({'status': 'error', 'message': msg})
+                messages.error(request, msg)
                 return render(request, 'core/upload.html', {'form': form})
 
             # ---- Save resume record (so we get a file path) ----------------
@@ -64,15 +68,15 @@ def upload_resume(request):
                     vision_data = analyze_resume_image_with_gemini(file_path, job_description)
                 except TimeoutError as te:
                     resume.delete()
-                    messages.error(request, f"⏱️ Connection Timeout: {te}")
+                    msg = f"⏱️ Connection Timeout: {te}"
+                    if is_ajax: return JsonResponse({'status': 'error', 'message': msg})
+                    messages.error(request, msg)
                     return render(request, 'core/upload.html', {'form': form})
                 if not vision_data:
                     resume.delete()
-                    messages.error(
-                        request,
-                        "⚠️ Vision AI could not analyse your resume image. "
-                        "Please ensure the image is clear and well-lit, or upload a PDF/DOCX instead."
-                    )
+                    msg = "⚠️ Vision AI could not analyse your resume image. Please ensure the image is clear."
+                    if is_ajax: return JsonResponse({'status': 'error', 'message': msg})
+                    messages.error(request, msg)
                     return render(request, 'core/upload.html', {'form': form})
 
                 raw_text    = vision_data.pop('ocr_text', '') or '[Image resume — text extracted by Vision AI]'
@@ -84,33 +88,33 @@ def upload_resume(request):
                 raw_text = extract_text(file_path)
 
                 if raw_text == IMAGE_FILE_SENTINEL:
-                    # Should not occur for PDF/DOCX — sentinel is only for explicit images
                     raw_text = ''
 
                 if not raw_text and file_ext == '.pdf':
-                    # ── Scanned / empty PDF ────────────────────────────
-                    print(f"[UPLOAD] PDF text empty — '{uploaded_file.name}' could not be parsed.")
                     resume.delete()
-                    messages.error(
-                        request,
-                        "We couldn't read this PDF text. Please try a smaller or text-based PDF."
-                    )
+                    msg = "We couldn't read this PDF text. Please try a smaller or text-based PDF."
+                    if is_ajax: return JsonResponse({'status': 'error', 'message': msg})
+                    messages.error(request, msg)
                     return render(request, 'core/upload.html', {'form': form})
 
-
                 elif not raw_text:
-                    # ── DOCX or other format returned empty ──────────────────
-                    print(f"[UPLOAD AUDIT] Text extraction returned empty for: {uploaded_file.name}")
                     resume.delete()
-                    messages.error(
-                        request,
-                        "⚠️ Scanning failed. Please ensure the file is not password-protected or corrupted."
-                    )
+                    msg = "⚠️ Scanning failed. Please ensure the file is not password-protected or corrupted."
+                    if is_ajax: return JsonResponse({'status': 'error', 'message': msg})
+                    messages.error(request, msg)
                     return render(request, 'core/upload.html', {'form': form})
 
                 else:
-                    # ── Normal text-based PDF / DOCX ─────────────────────────
-                    gemini_data = analyze_resume_with_gemini(raw_text, job_description)
+                    try:
+                        gemini_data = analyze_resume_with_gemini(raw_text, job_description)
+                    except Exception as e:
+                        resume.delete()
+                        msg = str(e)
+                        if '429' in msg:
+                            if is_ajax: return JsonResponse({'status': 'MEM_LIMIT_REACHED', 'message': 'Rate limit exceeded'})
+                        if is_ajax: return JsonResponse({'status': 'error', 'message': f"Analysis failed: {msg[:100]}"})
+                        messages.error(request, f"Analysis failed: {msg[:100]}")
+                        return render(request, 'core/upload.html', {'form': form})
 
             # ---- Populate resume metadata ----------------------------------
             resume.raw_text        = raw_text
@@ -143,13 +147,13 @@ def upload_resume(request):
             result.save()
 
             # ---- Autonomous Memory Management -------------------------------
-            # Explicitly invoke garbage collection to immediately free RAM
-            # consumed by heavy PyMuPDF extraction or large image files
             gc.collect()
+
+            if is_ajax:
+                return JsonResponse({'status': 'success', 'redirect': f'/dashboard/{result.pk}/'})
 
             messages.success(request, "Resume analysed successfully! 🎉")
             return redirect('dashboard', pk=result.pk)
-
         # Form has errors – re-render
         print("====== GHOST UPLOAD AUDIT ======")
         print(f"request.FILES present: {'resume_file' in request.FILES}")
@@ -157,10 +161,13 @@ def upload_resume(request):
         print("================================")
         
         # Give explicit frontend feedback to the user
+        error_msgs = []
         for field, errors in form.errors.items():
             for error in errors:
+                error_msgs.append(f"{field.replace('_', ' ').title()}: {error}")
                 messages.error(request, f"{field.replace('_', ' ').title()}: {error}")
                 
+        if is_ajax: return JsonResponse({'status': 'error', 'message': " | ".join(error_msgs)})
         return render(request, 'core/upload.html', {'form': form})
 
     else:

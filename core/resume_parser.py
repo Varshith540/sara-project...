@@ -44,13 +44,20 @@ def extract_text(file_path: str) -> str:
 def _extract_pdf(path: str) -> str:
     text = ""
 
+    import gc
+
     # ── Library 1: PyMuPDF (fitz) ────────────────────────────────────────────
     try:
         import fitz
+        text_chunks = []
         with fitz.open(path) as doc:
             for page in doc:
-                text += page.get_text() + "\n"
-        text = text.strip()
+                text_chunks.append(page.get_text())
+                del page
+        text = "\n".join(text_chunks).strip()
+        del text_chunks
+        gc.collect()
+        
         if text:
             print(f"[ResumeParser] PDF parsed successfully with PyMuPDF ({len(text)} chars).")
             return text
@@ -63,13 +70,17 @@ def _extract_pdf(path: str) -> str:
     # ── Library 2: pdfplumber ────────────────────────────────────────────────
     try:
         import pdfplumber
+        text_chunks = []
         with pdfplumber.open(path) as pdf:
-            pages_text = []
             for page in pdf.pages:
                 pg_text = page.extract_text()
                 if pg_text:
-                    pages_text.append(pg_text)
-        text = "\n".join(pages_text).strip()
+                    text_chunks.append(pg_text)
+                del page
+        text = "\n".join(text_chunks).strip()
+        del text_chunks
+        gc.collect()
+        
         if text:
             print(f"[ResumeParser] PDF parsed successfully with pdfplumber ({len(text)} chars).")
             return text

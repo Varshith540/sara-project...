@@ -78,18 +78,95 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // ── 2. Submit button loading state ───────────────────────────────────
+  // ── 2. Submit button & AJAX Form Upload ────────────────────────────────
   const uploadForm = document.getElementById('uploadForm');
   const submitBtn  = document.getElementById('submitBtn');
 
   if (uploadForm && submitBtn) {
-    uploadForm.addEventListener('submit', function () {
+    uploadForm.addEventListener('submit', function (e) {
+      e.preventDefault(); // Intercept standard submission
+
       const text    = submitBtn.querySelector('.btn-text');
       const loading = submitBtn.querySelector('.btn-loading');
       if (text)    text.classList.add('d-none');
-      if (loading) loading.classList.remove('d-none');
+      if (loading) {
+          loading.classList.remove('d-none');
+          // Sri AI memory optimization feedback
+          const loadingText = loading.querySelector('span');
+          if (loadingText) loadingText.textContent = " Sri AI is optimizing memory...";
+      }
       submitBtn.disabled = true;
+
+      const formData = new FormData(uploadForm);
+
+      fetch(uploadForm.action || window.location.href, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      })
+      .then(response => {
+        if (response.status === 429) {
+          throw new Error('MEM_LIMIT_REACHED');
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.status === 'success') {
+          window.location.href = data.redirect;
+        } else if (data.status === 'MEM_LIMIT_REACHED') {
+          showBetaModal();
+          resetSubmitBtn(text, loading);
+        } else {
+          alert('Error: ' + (data.message || 'Unknown error occurred.'));
+          resetSubmitBtn(text, loading);
+        }
+      })
+      .catch(error => {
+        if (error.message === 'MEM_LIMIT_REACHED') {
+          showBetaModal();
+        } else {
+          alert('Network or Server Error: ' + error.message);
+        }
+        resetSubmitBtn(text, loading);
+      });
     });
+
+    function resetSubmitBtn(text, loading) {
+        if (text) text.classList.remove('d-none');
+        if (loading) loading.classList.add('d-none');
+        submitBtn.disabled = false;
+    }
+
+    function showBetaModal() {
+        let modalEl = document.getElementById('betaCapacityModal');
+        if (!modalEl) {
+            const modalHTML = `
+            <div class="modal fade" id="betaCapacityModal" tabindex="-1" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg">
+                  <div class="modal-header bg-danger text-white border-0">
+                    <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Beta Version Capacity</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body p-4 text-center">
+                    <i class="bi bi-cpu-fill text-danger mb-3" style="font-size: 3rem;"></i>
+                    <h4>System Busy</h4>
+                    <p class="text-muted mb-0">Our AI is currently processing heavy traffic. Please try a smaller file or wait 30 seconds before trying again.</p>
+                  </div>
+                  <div class="modal-footer border-0 justify-content-center">
+                    <button type="button" class="btn btn-secondary px-4 rounded-pill" data-bs-dismiss="modal">Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>`;
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            modalEl = document.getElementById('betaCapacityModal');
+        }
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
   }
 
   // ── 3. JD character counter ───────────────────────────────────────────
