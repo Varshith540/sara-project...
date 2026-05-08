@@ -278,8 +278,8 @@ class SreAIRouter:
         headers = {
             'Authorization': f'Bearer {api_key}',
             'Content-Type':  'application/json',
-            'HTTP-Referer':  'https://resumexpert.app',
-            'X-Title':       'ResumeXpert',
+            'HTTP-Referer':  'https://resumeexpert-2eiv.onrender.com',
+            'X-Title':       'Anti Gravity Resume Analyzer',
         }
         resp = requests.post(
             f'{base}/chat/completions',
@@ -313,7 +313,10 @@ class SreAIRouter:
                     logger.warning(f'[Sre AI] Gemini {model} failed: {str(e)[:200]}')
 
         # ② OpenRouter Cascading Fallback Array
-        or_key = getattr(settings, 'OPENROUTER_API_KEY', '').strip()
+        or_key1 = getattr(settings, 'OPENROUTER_API_KEY', '').strip()
+        or_key2 = getattr(settings, 'OPENROUTER_SECONDARY_KEY', '').strip()
+        or_key = or_key1 if or_key1.startswith('sk-or-v1') else (or_key2 if or_key2.startswith('sk-or-v1') else (or_key1 or or_key2))
+
         fallback_models = [
             'meta-llama/llama-3.3-70b-instruct:free',
             'openrouter/free'
@@ -407,7 +410,11 @@ class SreAIRouter:
                     continue
 
         # ② Gemma-4
-        t2_key   = getattr(settings, 'OPENROUTER_SECONDARY_KEY', '').strip()
+        or_key1 = getattr(settings, 'OPENROUTER_API_KEY', '').strip()
+        or_key2 = getattr(settings, 'OPENROUTER_SECONDARY_KEY', '').strip()
+        best_or_key = or_key1 if or_key1.startswith('sk-or-v1') else (or_key2 if or_key2.startswith('sk-or-v1') else (or_key1 or or_key2))
+        
+        t2_key   = best_or_key
         t2_model = getattr(settings, 'OPENROUTER_SECONDARY_MODEL',
                            _OPENROUTER_SECONDARY_MODEL)
         if t2_key:
@@ -425,7 +432,7 @@ class SreAIRouter:
                 logger.warning(f'[Sre AI] Gemma-4 general failed: {e}')
 
         # ③ Llama 3.3-70B
-        t3_key   = getattr(settings, 'OPENROUTER_API_KEY', '').strip()
+        t3_key   = best_or_key
         t3_model = getattr(settings, 'OPENROUTER_MODEL', _OPENROUTER_MODEL)
         if t3_key:
             print(f'[Sre AI ▶ GENERAL] Falling back to Llama 3.3-70B...')
