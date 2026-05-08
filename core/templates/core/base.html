@@ -72,11 +72,21 @@
     </div>
   </div>
 </aside>
-  </div>
-</aside>
+
+<!-- ========== SIDEBAR OVERLAY ========== -->
+<div id="sidebarOverlay" class="sidebar-overlay d-none"></div>
 
 <!-- ========== MAIN CONTAINER ========== -->
 <div class="main-container" style="margin-left: 260px; display: flex; flex-direction: column; min-height: 100vh;">
+  
+  <!-- ========== MOBILE HEADER ========== -->
+  <div class="mobile-header">
+    <button id="mobileToggle" class="btn-menu" aria-label="Toggle Sidebar">
+      <i class="bi bi-list"></i>
+    </button>
+    <span class="mobile-header-brand">ResumeXpert</span>
+  </div>
+
   <!-- ========== MESSAGES ========== -->
   {% if messages %}
   <div class="container mt-3">
@@ -235,6 +245,23 @@
     }
     return cookieValue;
   }
+
+  // Sidebar Toggle Logic
+  document.addEventListener('DOMContentLoaded', () => {
+    const toggleBtn = document.getElementById('mobileToggle');
+    const sidebar = document.querySelector('.sidebar-wrapper');
+    const overlay = document.getElementById('sidebarOverlay');
+
+    if (toggleBtn && sidebar && overlay) {
+      function toggleSidebar() {
+        sidebar.classList.toggle('show-sidebar');
+        overlay.classList.toggle('d-none');
+      }
+
+      toggleBtn.addEventListener('click', toggleSidebar);
+      overlay.addEventListener('click', toggleSidebar);
+    }
+  });
 </script>
 {% block extra_js %}{% endblock %}
 </body>
