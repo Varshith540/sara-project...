@@ -7,6 +7,6 @@ exec gunicorn resumexpert.wsgi:application \
     --workers 1 \
     --max-requests 10 \
     --max-requests-jitter 5 \
-    --timeout 120 \
+    --timeout 300 \
     --access-logfile - \
     --error-logfile -

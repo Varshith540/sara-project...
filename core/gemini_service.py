@@ -699,15 +699,22 @@ JSON Schema:
     # ── VISION TIER 1: Gemini Flash Vision ────────────────────────────────────
     if client:
         print('[AI STATUS] Vision Tier-1: Attempting Gemini Vision...')
+        import time
         for model in [MODEL_NAME] + FALLBACKS:
             try:
                 from google.genai import types as genai_types
+                
+                # Use fully-typed Content to prevent Pydantic Validation Errors
+                strict_content = genai_types.Content(
+                    parts=[
+                        genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                        genai_types.Part.from_text(text=vision_prompt)
+                    ]
+                )
+                
                 response = client.models.generate_content(
                     model=model,
-                    contents=[
-                        genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                        vision_prompt,
-                    ],
+                    contents=strict_content,
                 )
                 label = f'Gemini Vision ({model.split("/")[-1]})'
                 result = _parse_vision_response(response.text, label)
@@ -715,8 +722,9 @@ JSON Schema:
                 return result
             except Exception as exc:
                 msg = str(exc)
-                if '429' in msg or '404' in msg or '503' in msg:
-                    logger.warning(f'[Vision Tier-1] {model} unavailable ({msg[:80]}), trying next…')
+                if '429' in msg or 'exhausted' in msg.lower() or '404' in msg or '503' in msg:
+                    logger.warning(f'[Vision Tier-1] {model} exhausted/unavailable ({msg[:80]}). Taking a 5-second breather...')
+                    time.sleep(5)
                     continue
                 logger.warning(f'[Vision Tier-1] {model} error: {exc}')
                 continue

@@ -537,7 +537,7 @@ def _process_upload_stream(request, form):
 
         # ── Extraction & AI Analysis ─────────────────────────────────────────
         if is_image:
-            yield send_status('ocr', "Sri AI is scanning the image content...")
+            yield send_status('ocr', "Extracting text from images...")
             try:
                 vision_data = analyze_resume_image_with_gemini(file_path, job_description)
                 gc.collect()
