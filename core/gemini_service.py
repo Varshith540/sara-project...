@@ -698,34 +698,36 @@ JSON Schema:
 
     # ── VISION TIER 1: Gemini Flash Vision ────────────────────────────────────
     if client:
-        print('[AI STATUS] Vision Tier-1: Attempting Gemini Vision...')
+        yield {"step": "ocr", "msg": "Sri AI is preparing Vision OCR extraction..."}
         import time
         for model in [MODEL_NAME] + FALLBACKS:
             try:
-                from google.genai import types as genai_types
-                
-                # Use fully-typed Content to prevent Pydantic Validation Errors
-                strict_content = genai_types.Content(
-                    parts=[
-                        genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                        genai_types.Part.from_text(text=vision_prompt)
+                # User-requested explicit Dictionary payload structure to bypass Pydantic errors
+                dict_payload = [{
+                    'role': 'user',
+                    'parts': [
+                        {'text': vision_prompt},
+                        {'mime_type': mime_type, 'data': image_bytes}
                     ]
-                )
+                }]
                 
                 response = client.models.generate_content(
                     model=model,
-                    contents=strict_content,
+                    contents=dict_payload,
                 )
                 label = f'Gemini Vision ({model.split("/")[-1]})'
                 result = _parse_vision_response(response.text, label)
                 print(f'[AI STATUS] Vision Tier-1 succeeded with {label}.')
-                return result
+                yield result
+                return
             except Exception as exc:
                 msg = str(exc)
                 if '429' in msg or 'exhausted' in msg.lower() or '404' in msg or '503' in msg:
+                    yield {"step": "healing", "msg": f"Sri AI detected a Quota limit on {model}. Taking a 5s breather before switching to Fallback..."}
                     logger.warning(f'[Vision Tier-1] {model} exhausted/unavailable ({msg[:80]}). Taking a 5-second breather...')
                     time.sleep(5)
                     continue
+                yield {"step": "ocr_fix", "msg": f"OCR validation failed with {model}. Sri AI is rewriting the OCR payload..."}
                 logger.warning(f'[Vision Tier-1] {model} error: {exc}')
                 continue
 
@@ -764,10 +766,13 @@ JSON Schema:
             label = f'Gemma 4 Vision via OpenRouter ({t2_model.split("/")[-1]})'
             result = _parse_vision_response(raw, label)
             print(f'[AI STATUS] Vision Tier-2 succeeded with {label}.')
-            return result
+            yield result
+            return
         except _req.exceptions.Timeout:
+            yield {"step": "healing", "msg": "Sri AI detected a connection timeout on Tier-2 (>60s). Switching to Tier-3 Fallback..."}
             logger.warning('[Vision Tier-2] Connection timeout (>60s) — switching to Tier-3.')
         except Exception as t2_exc:
+            yield {"step": "healing", "msg": "Vision Tier-2 failed. Re-routing request..."}
             logger.warning(f'[Vision Tier-2] Failed: {t2_exc}')
     else:
         print('[Vision Tier-2] OPENROUTER_SECONDARY_KEY not configured — skipping.')
@@ -807,18 +812,19 @@ JSON Schema:
             label = f'OpenRouter Vision ({t3_model.split("/")[-1]})'
             result = _parse_vision_response(raw, label)
             print(f'[AI STATUS] Vision Tier-3 succeeded with {label}.')
-            return result
+            yield result
+            return
         except _req.exceptions.Timeout:
             logger.error('[Vision Tier-3] Connection timeout (>60s).')
-            raise TimeoutError(
-                'Vision AI timed out (>60 s). The document may be too complex. '
-                'Try a clearer scan or a smaller image.'
-            )
+            yield {"step": "error", "msg": "Vision AI timed out (>60 s). Document may be too complex."}
+            return
         except Exception as t3_exc:
             logger.error(f'[Vision Tier-3] Failed: {t3_exc}')
+            yield {"step": "error", "msg": "All vision tiers failed due to server capacity limits."}
+            return
 
     logger.error('[Vision] All vision tiers failed.')
-    return {}
+    yield {}
 
 
 
@@ -876,6 +882,7 @@ Respond with this exact JSON format:
 }}"""
 
     try:
+        yield {"step": "analysis", "msg": "Sri AI is actively rewriting and optimizing your resume against the Job Description..."}
         raw, active_model = _generate(client, prompt, task_type=SreAIRouter.FORMATTING)
 
         # Strip markdown code fences if present
@@ -889,7 +896,7 @@ Respond with this exact JSON format:
         if benchmark:
             summary += f"<br><br><strong style='color:#0f766e;'><i class='bi bi-globe me-1'></i>Global Benchmark Comparison:</strong> {benchmark}"
 
-        return {
+        yield {
             'ai_summary':          summary,
             'ai_suggestions':      data.get('ai_suggestions', []),
             'interview_questions': data.get('interview_questions', []),
@@ -897,8 +904,9 @@ Respond with this exact JSON format:
             'active_model':        active_model,
         }
     except Exception as exc:
+        yield {"step": "error", "msg": "Sri AI failed to analyze the text. Please try again."}
         logger.warning(f"[Gemini] analyze_resume_with_gemini failed: {exc}")
-        return {}
+        yield {}
 
 
 # ---------------------------------------------------------------------------

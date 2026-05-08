@@ -510,7 +510,7 @@ def _process_upload_stream(request, form):
 
         # ── Adaptive Compression (> 5MB) ─────────────────────────────────────
         if file_size > 5 * 1024 * 1024:
-            yield send_status('compression', f"Compacting file for speed (Original size: {file_size // (1024*1024)}MB)...")
+            yield send_status('compression', "RAM usage high... Triggering adaptive compression to save server.")
             try:
                 if not is_image and file_ext == '.pdf':
                     import fitz
@@ -537,9 +537,13 @@ def _process_upload_stream(request, form):
 
         # ── Extraction & AI Analysis ─────────────────────────────────────────
         if is_image:
-            yield send_status('ocr', "Extracting text from images...")
             try:
-                vision_data = analyze_resume_image_with_gemini(file_path, job_description)
+                vision_data = {}
+                for update in analyze_resume_image_with_gemini(file_path, job_description):
+                    if isinstance(update, dict) and 'step' in update:
+                        yield send_status(update['step'], update['msg'])
+                    elif isinstance(update, dict):
+                        vision_data = update
                 gc.collect()
             except TimeoutError as te:
                 resume.delete()
@@ -572,7 +576,12 @@ def _process_upload_stream(request, form):
 
             else:
                 try:
-                    gemini_data = analyze_resume_with_gemini(raw_text, job_description)
+                    gemini_data = {}
+                    for update in analyze_resume_with_gemini(raw_text, job_description):
+                        if isinstance(update, dict) and 'step' in update:
+                            yield send_status(update['step'], update['msg'])
+                        elif isinstance(update, dict):
+                            gemini_data = update
                     gc.collect()
                 except Exception as e:
                     resume.delete()
