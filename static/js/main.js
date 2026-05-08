@@ -106,21 +106,43 @@ document.addEventListener('DOMContentLoaded', function () {
           'X-Requested-With': 'XMLHttpRequest'
         }
       })
-      .then(response => {
+      .then(async response => {
         if (response.status === 429) {
           throw new Error('MEM_LIMIT_REACHED');
         }
-        return response.json();
-      })
-      .then(data => {
-        if (data.status === 'success') {
-          window.location.href = data.redirect;
-        } else if (data.status === 'MEM_LIMIT_REACHED') {
-          showBetaModal();
-          resetSubmitBtn(text, loading);
-        } else {
-          alert('Error: ' + (data.message || 'Unknown error occurred.'));
-          resetSubmitBtn(text, loading);
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        
+        while (true) {
+          const {done, value} = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, {stream: true});
+          const lines = buffer.split('\n');
+          buffer = lines.pop(); // keep the last partial line in buffer
+          
+          for (let line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const data = JSON.parse(line);
+              
+              if (data.status === 'progress') {
+                const loadingText = loading.querySelector('span');
+                if (loadingText) loadingText.innerHTML = ` <i class="bi bi-hourglass-split"></i> ${data.message}`;
+              } else if (data.status === 'success') {
+                window.location.href = data.redirect;
+                return;
+              } else if (data.status === 'MEM_LIMIT_REACHED') {
+                throw new Error('MEM_LIMIT_REACHED');
+              } else if (data.status === 'error') {
+                throw new Error(data.message);
+              }
+            } catch (e) {
+              if (e.message === 'MEM_LIMIT_REACHED' || e.message.includes('Error')) throw e;
+            }
+          }
         }
       })
       .catch(error => {

@@ -43,117 +43,15 @@ def upload_resume(request):
 
         form = ResumeUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            uploaded_file   = request.FILES['resume_file']
-            job_description = form.cleaned_data['job_description']
-            manual_name     = form.cleaned_data.get('full_name', '').strip()
-            file_ext        = os.path.splitext(uploaded_file.name)[1].lower()
-            is_image        = file_ext in ('.jpg', '.jpeg', '.png')
-
-            # ---- 30MB Dynamic Size Limit Check ----
-            if uploaded_file.size > 30 * 1024 * 1024:
-                msg = "⚠️ File size too large. This is a beta version with a 30MB capacity limit to ensure stability."
-                if is_ajax: return JsonResponse({'status': 'error', 'message': msg})
-                messages.error(request, msg)
-                return render(request, 'core/upload.html', {'form': form})
-
-            # ---- Save resume record (so we get a file path) ----------------
-            resume = Resume(file=uploaded_file)
-            resume.save()
-            file_path = resume.file.path
-
-            # ---- Route: IMAGE → Vision AI  |  PDF/DOCX → Local Parser -----
-            if is_image:
-                print(f"[UPLOAD] Image resume detected ({file_ext}). Routing to Vision AI.")
-                try:
-                    vision_data = analyze_resume_image_with_gemini(file_path, job_description)
-                except TimeoutError as te:
-                    resume.delete()
-                    msg = f"⏱️ Connection Timeout: {te}"
-                    if is_ajax: return JsonResponse({'status': 'error', 'message': msg})
-                    messages.error(request, msg)
-                    return render(request, 'core/upload.html', {'form': form})
-                if not vision_data:
-                    resume.delete()
-                    msg = "⚠️ Vision AI could not analyse your resume image. Please ensure the image is clear."
-                    if is_ajax: return JsonResponse({'status': 'error', 'message': msg})
-                    messages.error(request, msg)
-                    return render(request, 'core/upload.html', {'form': form})
-
-                raw_text    = vision_data.pop('ocr_text', '') or '[Image resume — text extracted by Vision AI]'
-                gemini_data = vision_data
-
-            else:
-                # ---- Local text extraction (PDF / DOCX) --------------------
-                from .resume_parser import IMAGE_FILE_SENTINEL
-                raw_text = extract_text(file_path)
-
-                if raw_text == IMAGE_FILE_SENTINEL:
-                    raw_text = ''
-
-                if not raw_text and file_ext == '.pdf':
-                    resume.delete()
-                    msg = "We couldn't read this PDF text. Please try a smaller or text-based PDF."
-                    if is_ajax: return JsonResponse({'status': 'error', 'message': msg})
-                    messages.error(request, msg)
-                    return render(request, 'core/upload.html', {'form': form})
-
-                elif not raw_text:
-                    resume.delete()
-                    msg = "⚠️ Scanning failed. Please ensure the file is not password-protected or corrupted."
-                    if is_ajax: return JsonResponse({'status': 'error', 'message': msg})
-                    messages.error(request, msg)
-                    return render(request, 'core/upload.html', {'form': form})
-
-                else:
-                    try:
-                        gemini_data = analyze_resume_with_gemini(raw_text, job_description)
-                    except Exception as e:
-                        resume.delete()
-                        msg = str(e)
-                        if '429' in msg:
-                            if is_ajax: return JsonResponse({'status': 'MEM_LIMIT_REACHED', 'message': 'Rate limit exceeded'})
-                        if is_ajax: return JsonResponse({'status': 'error', 'message': f"Analysis failed: {msg[:100]}"})
-                        messages.error(request, f"Analysis failed: {msg[:100]}")
-                        return render(request, 'core/upload.html', {'form': form})
-
-            # ---- Populate resume metadata ----------------------------------
-            resume.raw_text        = raw_text
-            resume.name            = manual_name or extract_name(raw_text)
-            resume.email           = extract_email(raw_text)
-            resume.phone           = extract_phone(raw_text)
-            resume.target_industry = form.cleaned_data.get('target_industry', '').strip()
-            resume.save()
-
-            # ---- Run ATS scoring ------------------------------------------
-            score_data = calculate_score(raw_text, job_description)
-
-            result = AnalysisResult(
-                resume            = resume,
-                job_description   = job_description,
-                ats_score         = score_data['ats_score'],
-                skill_match_score = score_data['skill_match_score'],
-                cosine_score      = score_data['cosine_score'],
-                matched_skills    = score_data['matched_skills'],
-                missing_skills    = score_data['missing_skills'],
-                resume_skills     = score_data['resume_skills'],
-                suggestions       = score_data['suggestions'],
-                # Gemini AI fields
-                ai_summary        = gemini_data.get('ai_summary', ''),
-                ai_suggestions    = gemini_data.get('ai_suggestions', []),
-                interview_questions = gemini_data.get('interview_questions', []),
-                job_fit_score     = gemini_data.get('job_fit_score', 0),
-                active_ai_model   = gemini_data.get('active_model', 'Gemini'),
-            )
-            result.save()
-
-            # ---- Autonomous Memory Management -------------------------------
-            gc.collect()
-
             if is_ajax:
-                return JsonResponse({'status': 'success', 'redirect': f'/dashboard/{result.pk}/'})
-
-            messages.success(request, "Resume analysed successfully! 🎉")
-            return redirect('dashboard', pk=result.pk)
+                from django.http import StreamingHttpResponse
+                return StreamingHttpResponse(
+                    _process_upload_stream(request, form),
+                    content_type='application/x-ndjson'
+                )
+            else:
+                messages.error(request, 'Please enable JavaScript to upload files.')
+                return render(request, 'core/upload.html', {'form': form})
         # Form has errors – re-render
         print("====== GHOST UPLOAD AUDIT ======")
         print(f"request.FILES present: {'resume_file' in request.FILES}")
@@ -558,3 +456,148 @@ def upload_resume_photo(request, pk):
         return JsonResponse({'status': 'error', 'message': 'No file provided'}, status=400)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+# ---------------------------------------------------------------------------
+# Generator: Upload Stream Pipeline
+# ---------------------------------------------------------------------------
+def _process_upload_stream(request, form):
+    """Generator yielding NDJSON milestones for the AJAX stream."""
+    import json
+    import os
+    import gc
+    from .models import Resume, AnalysisResult
+    from .resume_parser import extract_text, extract_email, extract_phone, extract_name
+    from .scoring_engine import calculate_score
+    from .gemini_service import analyze_resume_image_with_gemini, analyze_resume_with_gemini
+
+    def send_status(msg):
+        return json.dumps({'status': 'progress', 'message': msg}) + '\n'
+
+    def send_error(msg):
+        return json.dumps({'status': 'error', 'message': msg}) + '\n'
+
+    try:
+        uploaded_file   = request.FILES['resume_file']
+        job_description = form.cleaned_data['job_description']
+        manual_name     = form.cleaned_data.get('full_name', '').strip()
+        file_ext        = os.path.splitext(uploaded_file.name)[1].lower()
+        is_image        = file_ext in ('.jpg', '.jpeg', '.png')
+        file_size       = uploaded_file.size
+
+        yield send_status("File Received. Starting Validation...")
+
+        if file_size > 30 * 1024 * 1024:
+            yield json.dumps({'status': 'error', 'message': "⚠️ File size too large. This is a beta version with a 30MB capacity limit."}) + '\n'
+            return
+
+        resume = Resume(file=uploaded_file)
+        resume.save()
+        file_path = resume.file.path
+
+        # ── Adaptive Compression (> 5MB) ─────────────────────────────────────
+        if file_size > 5 * 1024 * 1024:
+            yield send_status(f"Optimizing Document for AI (Original size: {file_size // (1024*1024)}MB)...")
+            try:
+                if not is_image and file_ext == '.pdf':
+                    import fitz
+                    compressed_path = file_path + ".compressed.pdf"
+                    with fitz.open(file_path) as doc:
+                        doc.save(compressed_path, garbage=4, deflate=True, clean=True)
+                    os.replace(compressed_path, file_path)
+                    print(f"[Compression] PDF compressed successfully: {file_path}")
+                elif is_image:
+                    from PIL import Image
+                    compressed_path = file_path + ".compressed.jpg"
+                    with Image.open(file_path) as img:
+                        if img.mode != 'RGB':
+                            img = img.convert('RGB')
+                        img.thumbnail((1500, 1500), Image.Resampling.LANCZOS)
+                        img.save(compressed_path, "JPEG", quality=60, optimize=True)
+                    os.replace(compressed_path, file_path)
+                    print(f"[Compression] Image compressed successfully: {file_path}")
+            except Exception as e:
+                print(f"[Compression] Compression failed, proceeding with original. Error: {e}")
+            gc.collect()
+
+        # ── Extraction & AI Analysis ─────────────────────────────────────────
+        if is_image:
+            yield send_status("Sri AI is reading the image content...")
+            try:
+                vision_data = analyze_resume_image_with_gemini(file_path, job_description)
+            except TimeoutError as te:
+                resume.delete()
+                yield send_error(f"⏱️ Connection Timeout: {te}")
+                return
+            if not vision_data:
+                resume.delete()
+                yield send_error("⚠️ Vision AI could not analyse your resume image. Please ensure it's clear.")
+                return
+
+            raw_text    = vision_data.pop('ocr_text', '') or '[Image resume — text extracted by Vision AI]'
+            gemini_data = vision_data
+        else:
+            yield send_status("Sri AI is now reading the content...")
+            from .resume_parser import IMAGE_FILE_SENTINEL
+            raw_text = extract_text(file_path)
+
+            if raw_text == IMAGE_FILE_SENTINEL:
+                raw_text = ''
+
+            if not raw_text and file_ext == '.pdf':
+                resume.delete()
+                yield send_error("We couldn't read this PDF text. Please try a smaller or text-based PDF.")
+                return
+
+            elif not raw_text:
+                resume.delete()
+                yield send_error("⚠️ Scanning failed. Please ensure the file is not password-protected or corrupted.")
+                return
+
+            else:
+                try:
+                    gemini_data = analyze_resume_with_gemini(raw_text, job_description)
+                except Exception as e:
+                    resume.delete()
+                    msg = str(e)
+                    if '429' in msg:
+                        yield json.dumps({'status': 'MEM_LIMIT_REACHED'}) + '\n'
+                        return
+                    yield send_error(f"Analysis failed: {msg[:100]}")
+                    return
+
+        # ── Finalizing Data ──────────────────────────────────────────────────
+        yield send_status("Finalizing ATS Score & Suggestions...")
+        
+        resume.raw_text        = raw_text
+        resume.name            = manual_name or extract_name(raw_text)
+        resume.email           = extract_email(raw_text)
+        resume.phone           = extract_phone(raw_text)
+        resume.target_industry = form.cleaned_data.get('target_industry', '').strip()
+        resume.save()
+
+        score_data = calculate_score(raw_text, job_description)
+
+        result = AnalysisResult(
+            resume            = resume,
+            job_description   = job_description,
+            ats_score         = score_data['ats_score'],
+            skill_match_score = score_data['skill_match_score'],
+            cosine_score      = score_data['cosine_score'],
+            matched_skills    = score_data['matched_skills'],
+            missing_skills    = score_data['missing_skills'],
+            resume_skills     = score_data['resume_skills'],
+            suggestions       = score_data['suggestions'],
+            ai_summary        = gemini_data.get('ai_summary', ''),
+            ai_suggestions    = gemini_data.get('ai_suggestions', []),
+            interview_questions = gemini_data.get('interview_questions', []),
+            job_fit_score     = gemini_data.get('job_fit_score', 0),
+            active_ai_model   = gemini_data.get('active_model', 'Gemini'),
+        )
+        result.save()
+
+        gc.collect()
+        yield json.dumps({'status': 'success', 'redirect': f'/dashboard/{result.pk}/'}) + '\n'
+
+    except Exception as e:
+        print(f"[Upload Stream Error] {e}")
+        yield send_error(f"Server Error: {str(e)[:100]}")
