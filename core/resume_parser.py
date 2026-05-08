@@ -113,17 +113,30 @@ def _extract_pdf(path: str) -> str:
     try:
         import fitz
         from google import genai
-        import os
+        from PIL import Image
+        import io
         from django.conf import settings
         
-        # 1. Convert first page to low-quality JPEG (Memory Guarded)
+        # 1. Convert first 2 pages to low-quality JPEG (Memory Guarded)
+        img_payloads = ["Extract all text from these resume images professionally. Output only the extracted text."]
         with fitz.open(path) as doc:
-            page = doc.load_page(0)
-            mat = fitz.Matrix(150 / 72, 150 / 72)  # 150 DPI for low-RAM usage
-            pix = page.get_pixmap(matrix=mat, alpha=False)
-            img_bytes = pix.tobytes('jpeg')
-            del page
-            del pix
+            for page_num in range(min(2, len(doc))):
+                page = doc.load_page(page_num)
+                mat = fitz.Matrix(150 / 72, 150 / 72)  # 150 DPI
+                pix = page.get_pixmap(matrix=mat, alpha=False)
+                
+                # Further compress to 60% JPEG quality using Pillow to save RAM
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=60, optimize=True)
+                img_bytes = buf.getvalue()
+                
+                img_payloads.append({'mime_type': 'image/jpeg', 'data': img_bytes})
+                
+                del page
+                del pix
+                del img
+                buf.close()
             
         import gc; gc.collect()
         
@@ -134,10 +147,7 @@ def _extract_pdf(path: str) -> str:
             
             response = client.models.generate_content(
                 model='gemini-1.5-flash',
-                contents=[
-                    "Extract all text from this resume image professionally. Output only the extracted text.",
-                    {'mime_type': 'image/jpeg', 'data': img_bytes}
-                ]
+                contents=img_payloads
             )
             text = response.text.strip()
             if text:

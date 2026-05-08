@@ -470,11 +470,13 @@ def _process_upload_stream(request, form):
     from .scoring_engine import calculate_score
     from .gemini_service import analyze_resume_image_with_gemini, analyze_resume_with_gemini
 
-    def send_status(msg):
-        return json.dumps({'status': 'progress', 'message': msg}) + '\n'
+    def send_status(step, msg):
+        return json.dumps({'step': step, 'msg': msg}) + '\n'
 
     def send_error(msg):
-        return json.dumps({'status': 'error', 'message': msg}) + '\n'
+        return json.dumps({'step': 'error', 'msg': msg}) + '\n'
+
+    temp_files = []
 
     try:
         uploaded_file   = request.FILES['resume_file']
@@ -484,23 +486,25 @@ def _process_upload_stream(request, form):
         is_image        = file_ext in ('.jpg', '.jpeg', '.png')
         file_size       = uploaded_file.size
 
-        yield send_status("File Received. Starting Validation...")
+        yield send_status('validation', "File Received. Starting Validation...")
 
         if file_size > 30 * 1024 * 1024:
-            yield json.dumps({'status': 'error', 'message': "⚠️ File size too large. This is a beta version with a 30MB capacity limit."}) + '\n'
+            yield send_error("⚠️ File size too large. This is a beta version with a 30MB capacity limit.")
             return
 
         resume = Resume(file=uploaded_file)
         resume.save()
         file_path = resume.file.path
+        temp_files.append(file_path)
 
         # ── Adaptive Compression (> 5MB) ─────────────────────────────────────
         if file_size > 5 * 1024 * 1024:
-            yield send_status(f"Optimizing Document for AI (Original size: {file_size // (1024*1024)}MB)...")
+            yield send_status('compression', f"Compacting file for speed (Original size: {file_size // (1024*1024)}MB)...")
             try:
                 if not is_image and file_ext == '.pdf':
                     import fitz
                     compressed_path = file_path + ".compressed.pdf"
+                    temp_files.append(compressed_path)
                     with fitz.open(file_path) as doc:
                         doc.save(compressed_path, garbage=4, deflate=True, clean=True)
                     os.replace(compressed_path, file_path)
@@ -508,6 +512,7 @@ def _process_upload_stream(request, form):
                 elif is_image:
                     from PIL import Image
                     compressed_path = file_path + ".compressed.jpg"
+                    temp_files.append(compressed_path)
                     with Image.open(file_path) as img:
                         if img.mode != 'RGB':
                             img = img.convert('RGB')
@@ -521,9 +526,10 @@ def _process_upload_stream(request, form):
 
         # ── Extraction & AI Analysis ─────────────────────────────────────────
         if is_image:
-            yield send_status("Sri AI is reading the image content...")
+            yield send_status('ocr', "Sri AI is scanning the image content...")
             try:
                 vision_data = analyze_resume_image_with_gemini(file_path, job_description)
+                gc.collect()
             except TimeoutError as te:
                 resume.delete()
                 yield send_error(f"⏱️ Connection Timeout: {te}")
@@ -536,7 +542,7 @@ def _process_upload_stream(request, form):
             raw_text    = vision_data.pop('ocr_text', '') or '[Image resume — text extracted by Vision AI]'
             gemini_data = vision_data
         else:
-            yield send_status("Sri AI is now reading the content...")
+            yield send_status('ocr', "Sri AI is reading the content...")
             from .resume_parser import IMAGE_FILE_SENTINEL
             raw_text = extract_text(file_path)
 
@@ -556,17 +562,18 @@ def _process_upload_stream(request, form):
             else:
                 try:
                     gemini_data = analyze_resume_with_gemini(raw_text, job_description)
+                    gc.collect()
                 except Exception as e:
                     resume.delete()
                     msg = str(e)
                     if '429' in msg:
-                        yield json.dumps({'status': 'MEM_LIMIT_REACHED'}) + '\n'
+                        yield json.dumps({'step': 'MEM_LIMIT_REACHED', 'msg': 'Rate limit exceeded'}) + '\n'
                         return
                     yield send_error(f"Analysis failed: {msg[:100]}")
                     return
 
         # ── Finalizing Data ──────────────────────────────────────────────────
-        yield send_status("Finalizing ATS Score & Suggestions...")
+        yield send_status('analysis', "Finalizing ATS score & Suggestions...")
         
         resume.raw_text        = raw_text
         resume.name            = manual_name or extract_name(raw_text)
@@ -596,8 +603,25 @@ def _process_upload_stream(request, form):
         result.save()
 
         gc.collect()
-        yield json.dumps({'status': 'success', 'redirect': f'/dashboard/{result.pk}/'}) + '\n'
+        yield json.dumps({'step': 'success', 'redirect': f'/dashboard/{result.pk}/'}) + '\n'
 
     except Exception as e:
         print(f"[Upload Stream Error] {e}")
         yield send_error(f"Server Error: {str(e)[:100]}")
+    finally:
+        # Cleanup temporary processing files
+        for tmp_file in temp_files:
+            if os.path.exists(tmp_file) and tmp_file != getattr(resume, 'file', None).path if hasattr(resume, 'file') else False:
+                # wait, if it's the actual saved DB file, we shouldn't remove it.
+                # Actually, temp files append only file_path if we want to delete it.
+                pass
+        # Wait, the user uploaded a resume and it is stored in the DB (resume.file.path). We MUST NOT delete the main file_path unless the resume model is deleted. 
+        # The prompt says: "Clean up all temporary files in a finally block using os.remove()." This refers to compressed temp files.
+        # Let's fix the finally block to only delete temporary files like compressed_path that might be leftover.
+        for tmp_file in temp_files:
+            if ".compressed." in tmp_file and os.path.exists(tmp_file):
+                try:
+                    os.remove(tmp_file)
+                except Exception:
+                    pass
+        gc.collect()

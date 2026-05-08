@@ -128,16 +128,16 @@ document.addEventListener('DOMContentLoaded', function () {
             try {
               const data = JSON.parse(line);
               
-              if (data.status === 'progress') {
+              if (data.step && data.step !== 'success' && data.step !== 'error' && data.step !== 'MEM_LIMIT_REACHED') {
                 const loadingText = loading.querySelector('span');
-                if (loadingText) loadingText.innerHTML = ` <i class="bi bi-hourglass-split"></i> ${data.message}`;
-              } else if (data.status === 'success') {
+                if (loadingText) loadingText.innerHTML = ` <i class="bi bi-hourglass-split"></i> ${data.msg}`;
+              } else if (data.step === 'success') {
                 window.location.href = data.redirect;
                 return;
-              } else if (data.status === 'MEM_LIMIT_REACHED') {
+              } else if (data.step === 'MEM_LIMIT_REACHED') {
                 throw new Error('MEM_LIMIT_REACHED');
-              } else if (data.status === 'error') {
-                throw new Error(data.message);
+              } else if (data.step === 'error') {
+                throw new Error(data.msg);
               }
             } catch (e) {
               if (e.message === 'MEM_LIMIT_REACHED' || e.message.includes('Error')) throw e;
