@@ -611,14 +611,6 @@ def _process_upload_stream(request, form):
     finally:
         # Cleanup temporary processing files
         for tmp_file in temp_files:
-            if os.path.exists(tmp_file) and tmp_file != getattr(resume, 'file', None).path if hasattr(resume, 'file') else False:
-                # wait, if it's the actual saved DB file, we shouldn't remove it.
-                # Actually, temp files append only file_path if we want to delete it.
-                pass
-        # Wait, the user uploaded a resume and it is stored in the DB (resume.file.path). We MUST NOT delete the main file_path unless the resume model is deleted. 
-        # The prompt says: "Clean up all temporary files in a finally block using os.remove()." This refers to compressed temp files.
-        # Let's fix the finally block to only delete temporary files like compressed_path that might be leftover.
-        for tmp_file in temp_files:
             if ".compressed." in tmp_file and os.path.exists(tmp_file):
                 try:
                     os.remove(tmp_file)
