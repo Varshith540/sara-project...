@@ -382,8 +382,8 @@ class SreAIRouter:
         or_key = or_key1 if or_key1.startswith('sk-or-v1') else (or_key2 if or_key2.startswith('sk-or-v1') else (or_key1 or or_key2))
         
         fallback_models = [
-            'google/gemma-2-9b-it:free',
-            'meta-llama/llama-3.3-70b-instruct:free'
+            'meta-llama/llama-3.1-8b-instruct:free',
+            'google/gemma-2-9b-it:free'
         ]
         
         messages = [
