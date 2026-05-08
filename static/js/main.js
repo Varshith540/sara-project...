@@ -52,11 +52,20 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!fileInfo || !fileName || !fileSize) return;
       const allowed = ['.pdf', '.docx'];
       const ext     = '.' + file.name.split('.').pop().toLowerCase();
+      
       if (!allowed.includes(ext)) {
         alert('Only PDF and DOCX files are allowed.');
         fileInput.value = '';
         return;
       }
+      
+      // Strict 2MB Limit (Client-Side Validation)
+      if (file.size > 2 * 1024 * 1024) {
+        alert('File size too large. This is a beta version with a 2MB limit.');
+        fileInput.value = '';
+        return;
+      }
+
       fileName.textContent = file.name;
       fileSize.textContent = formatBytes(file.size);
       fileInfo.classList.remove('d-none');

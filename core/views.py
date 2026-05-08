@@ -46,9 +46,9 @@ def upload_resume(request):
             file_ext        = os.path.splitext(uploaded_file.name)[1].lower()
             is_image        = file_ext in ('.jpg', '.jpeg', '.png')
 
-            # ---- 5MB Size Limit Check ----
-            if uploaded_file.size > 5 * 1024 * 1024:
-                messages.error(request, "⚠️ File size exceeds 5MB. Please upload a smaller resume to continue.")
+            # ---- 2MB Strict Size Limit Check ----
+            if uploaded_file.size > 2 * 1024 * 1024:
+                messages.error(request, "⚠️ File size too large. This is a beta version with a 2MB limit.")
                 return render(request, 'core/upload.html', {'form': form})
 
             # ---- Save resume record (so we get a file path) ----------------
