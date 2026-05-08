@@ -349,38 +349,68 @@ class SreAIRouter:
             'Both Gemini API and OpenRouter models failed.'
         )
 
-    # ── RESEARCH route  (Gemini-only — real-time web grounding) ──────────────
+    # ── RESEARCH route  (Gemini → Cascading Fallback Array) ───────────────
     def route_research(self, prompt: str) -> tuple[str, str]:
         """
         Real-time research / company intel / scratch resume generation.
-        Only Gemini has web grounding — no OpenRouter fallback is meaningful here.
+        Priority: 
+          1. Gemini 1.5 Flash (Primary, web-grounded)
+          2. Cascading Fallback Array on OpenRouter (Gemma-2, Llama-3)
         """
+        # ① Gemini (Primary for web-grounded intel)
         client = _get_client()
-        if not client:
-            raise RuntimeError(
-                '[Sre AI] RESEARCH task requires Gemini (web-grounded). '
-                'GEMINI_API_KEY is not configured.'
-            )
-
-        print('[Sre AI ▶ RESEARCH] Routing to Gemini (web-grounded)...')
-        for model in [MODEL_NAME] + FALLBACKS:
-            try:
-                resp  = client.models.generate_content(model=model,
-                                                       contents=prompt)
-                label = f'Gemini ({model.split("/")[-1]}) [research]'
-                print(f'[Sre AI ✓] Research succeeded with {label}.')
-                return resp.text.strip(), label
-            except Exception as e:
-                msg = str(e)
-                if '429' in msg or '404' in msg or '503' in msg:
-                    logger.warning(f'[Sre AI] Gemini {model} quota/unavailable: {msg[:80]}')
+        if client:
+            print('[Sre AI ▶ RESEARCH] Routing to Gemini (web-grounded)...')
+            for model in [MODEL_NAME] + FALLBACKS:
+                try:
+                    resp  = client.models.generate_content(model=model,
+                                                           contents=prompt)
+                    label = f'Gemini ({model.split("/")[-1]}) [research]'
+                    print(f'[Sre AI ✓] Research succeeded with {label}.')
+                    return resp.text.strip(), label
+                except Exception as e:
+                    msg = str(e)
+                    if '429' in msg or '404' in msg or '503' in msg:
+                        logger.warning(f'[Sre AI] Gemini {model} quota/unavailable: {msg[:80]}')
+                        continue
+                    logger.warning(f'[Sre AI] Gemini {model} research error: {msg[:80]}')
                     continue
-                logger.warning(f'[Sre AI] Gemini {model} research error: {e}')
-                continue
+
+        # ② OpenRouter Cascading Fallback Array
+        or_key1 = getattr(settings, 'OPENROUTER_API_KEY', '').strip()
+        or_key2 = getattr(settings, 'OPENROUTER_SECONDARY_KEY', '').strip()
+        or_key = or_key1 if or_key1.startswith('sk-or-v1') else (or_key2 if or_key2.startswith('sk-or-v1') else (or_key1 or or_key2))
+        
+        fallback_models = [
+            'google/gemma-2-9b-it:free',
+            'meta-llama/llama-3.3-70b-instruct:free'
+        ]
+        
+        messages = [
+            {'role': 'system', 'content': _OPENROUTER_SYSTEM_PROMPT},
+            {'role': 'user',   'content': prompt},
+        ]
+
+        if or_key:
+            print('[Sre AI ▶ RESEARCH] Gemini failed/exhausted. Initiating OpenRouter Fallback Array...')
+            for model_name in fallback_models:
+                print(f'[Sre AI ▶ RESEARCH] Trying model: {model_name}...')
+                try:
+                    raw = self._or_post(or_key, model_name, messages)
+                    label = f'OpenRouter ({model_name.split("/")[-1]}) [research]'
+                    print(f'[Sre AI ✓] Research succeeded with {label}.')
+                    return raw, label
+                except requests.exceptions.RequestException as e:
+                    err_msg = str(e.response.text) if hasattr(e, 'response') and e.response else str(e)
+                    logger.warning(f'[Sre AI] OpenRouter Model {model_name} failed: {err_msg[:200]}... Moving to next.')
+                except Exception as e:
+                    logger.warning(f'[Sre AI] OpenRouter Model {model_name} failed: {str(e)[:200]}... Moving to next.')
+        else:
+            print('[Sre AI ▶ RESEARCH] No OpenRouter key configured, skipping Fallback Array.')
 
         raise RuntimeError(
-            '[Sre AI] All Gemini models are quota-exhausted for RESEARCH task. '
-            'Try again later or increase Gemini quota.'
+            '[Sre AI] All RESEARCH backends exhausted. '
+            'Both Gemini API and OpenRouter models failed.'
         )
 
     # ── GENERAL route  (Gemini → Gemma-4 → Llama — current proven order) ────
