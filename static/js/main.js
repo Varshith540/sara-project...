@@ -98,7 +98,10 @@ document.addEventListener('DOMContentLoaded', function () {
       submitBtn.disabled = true;
 
       const formData = new FormData(uploadForm);
+      performUpload(formData, text, loading);
+    });
 
+    function performUpload(formData, text, loading) {
       fetch(uploadForm.action || window.location.href, {
         method: 'POST',
         body: formData,
@@ -128,7 +131,10 @@ document.addEventListener('DOMContentLoaded', function () {
             try {
               const data = JSON.parse(line);
               
-              if (data.step && data.step !== 'success' && data.step !== 'error' && data.step !== 'MEM_LIMIT_REACHED') {
+              if (data.step === 'large_file_detected') {
+                showLargeFileModal(data.msg, formData, text, loading);
+                return; // Gracefully exit stream
+              } else if (data.step && data.step !== 'success' && data.step !== 'error' && data.step !== 'MEM_LIMIT_REACHED') {
                 const loadingText = loading.querySelector('span');
                 if (loadingText) loadingText.innerHTML = ` <i class="bi bi-hourglass-split"></i> ${data.msg}`;
               } else if (data.step === 'success') {
@@ -153,7 +159,59 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         resetSubmitBtn(text, loading);
       });
-    });
+    }
+
+    function showLargeFileModal(message, formData, text, loading) {
+      // Remove any existing modal
+      const existing = document.getElementById('largeFileModal');
+      if (existing) existing.remove();
+
+      const modalHTML = `
+      <div class="modal fade" id="largeFileModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-warning text-dark border-0">
+              <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>High Capacity Detected</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="cancelUploadIcon"></button>
+            </div>
+            <div class="modal-body p-4 text-center">
+              <i class="bi bi-file-earmark-zip text-warning mb-3" style="font-size: 3rem;"></i>
+              <h4>Action Required</h4>
+              <p class="text-muted mb-0">High capacity file detected. To save server memory and time, we will compress this. Estimated time: 60-90 seconds.</p>
+            </div>
+            <div class="modal-footer border-0 justify-content-center">
+              <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal" id="cancelUploadBtn">Cancel</button>
+              <button type="button" class="btn btn-warning px-4 text-dark fw-bold" id="proceedCompressBtn">Proceed with Compression</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+      
+      document.body.insertAdjacentHTML('beforeend', modalHTML);
+      const modalEl = document.getElementById('largeFileModal');
+      const bsModal = new bootstrap.Modal(modalEl);
+      bsModal.show();
+
+      document.getElementById('proceedCompressBtn').addEventListener('click', () => {
+        bsModal.hide();
+        formData.append('force_compress', 'true');
+        // Reset loader UI
+        if (text) text.classList.add('d-none');
+        if (loading) {
+            loading.classList.remove('d-none');
+            const loadingText = loading.querySelector('span');
+            if (loadingText) loadingText.innerHTML = ` <i class="bi bi-hourglass-split"></i> Preparing Compression...`;
+        }
+        performUpload(formData, text, loading);
+      });
+
+      const cancelAction = () => {
+        resetSubmitBtn(text, loading);
+      };
+      
+      document.getElementById('cancelUploadBtn').addEventListener('click', cancelAction);
+      document.getElementById('cancelUploadIcon').addEventListener('click', cancelAction);
+    }
 
     function resetSubmitBtn(text, loading) {
         if (text) text.classList.remove('d-none');

@@ -485,11 +485,22 @@ def _process_upload_stream(request, form):
         file_ext        = os.path.splitext(uploaded_file.name)[1].lower()
         is_image        = file_ext in ('.jpg', '.jpeg', '.png')
         file_size       = uploaded_file.size
+        force_compress  = request.POST.get('force_compress') == 'true'
 
         yield send_status('validation', "File Received. Starting Validation...")
 
         if file_size > 30 * 1024 * 1024:
             yield send_error("⚠️ File size too large. This is a beta version with a 30MB capacity limit.")
+            return
+
+        # ── 2-Pass Smart Gatekeeper (> 5MB) ──────────────────────────────────
+        if file_size > 5 * 1024 * 1024 and not force_compress:
+            mb_size = f"{file_size / (1024 * 1024):.1f}"
+            yield json.dumps({
+                "step": "large_file_detected",
+                "msg": f"File is heavy ({mb_size} MB). Move to compression?",
+                "size": mb_size
+            }) + '\n'
             return
 
         resume = Resume(file=uploaded_file)
