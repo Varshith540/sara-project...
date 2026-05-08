@@ -172,22 +172,24 @@
     }
   }
 
-  function appendMessage(sender, text) {
-    const history = document.getElementById('chatHistory');
-    const msgDiv = document.createElement('div');
-    msgDiv.className = sender === 'user' ? 'd-flex mb-3 justify-content-end' : 'd-flex mb-3';
-    
-    const bubble = document.createElement('div');
-    bubble.className = sender === 'user' 
-        ? 'bg-primary text-white rounded-3 p-2 shadow-sm' 
-        : 'bg-white border rounded-3 p-2 shadow-sm';
-    bubble.style.maxWidth = '85%';
-    bubble.innerHTML = text.replace(/\n/g, '<br>');
-    
-    msgDiv.appendChild(bubble);
-    history.appendChild(msgDiv);
-    history.scrollTop = history.scrollHeight;
-  }
+    function appendMessage(sender, text) {
+        const history = document.getElementById('chatHistory');
+        const msgDiv = document.createElement('div');
+        msgDiv.className = sender === 'user' ? 'd-flex mb-3 justify-content-end' : 'd-flex mb-3';
+        
+        const bubble = document.createElement('div');
+        bubble.className = sender === 'user' 
+            ? 'bg-primary text-white rounded-3 p-2 shadow-sm' 
+            : 'bg-white border rounded-3 p-2 shadow-sm';
+        bubble.style.maxWidth = '85%';
+        bubble.innerHTML = text.replace(/\n/g, '<br>');
+        
+        msgDiv.appendChild(bubble);
+        history.appendChild(msgDiv);
+        history.scrollTop = history.scrollHeight;
+        
+        return msgDiv; // Return element for chaining classes
+    }
 
   function sendChatMessage() {
     const input = document.getElementById('chatInput');
@@ -207,27 +209,45 @@
     history.appendChild(loadingDiv);
     history.scrollTop = history.scrollHeight;
     
+    // AbortController for 120-second timeout (accommodates OpenRouter fallback)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+
     fetch('/api/chat/', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-CSRFToken': getCookie('csrftoken')
         },
-        body: JSON.stringify({ message: text })
+        body: JSON.stringify({ message: text }),
+        signal: controller.signal
     })
-    .then(response => response.json())
+    .then(async (response) => {
+        clearTimeout(timeoutId);
+        // Clean up any existing error messages in chat
+        document.querySelectorAll('.error-msg').forEach(el => el.remove());
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
-        document.getElementById(loadingId).remove();
+        document.getElementById(loadingId)?.remove();
         if(data.reply) {
             appendMessage('bot', data.reply);
         } else {
-            appendMessage('bot', 'Sorry, I encountered an error.');
+            appendMessage('bot', 'Sorry, I encountered an error.').classList.add('error-msg');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        document.getElementById(loadingId).remove();
-        appendMessage('bot', 'Network error occurred. Falling back to Gemma local backup may have failed.');
+        document.getElementById(loadingId)?.remove();
+        if (error.name === 'AbortError') {
+            appendMessage('bot', 'Request timed out waiting for AI fallback. Please try again.').classList.add('error-msg');
+        } else {
+            appendMessage('bot', 'Network error or AI fallback failed. Please try again.').classList.add('error-msg');
+        }
     });
   }
 
