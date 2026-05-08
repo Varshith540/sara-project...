@@ -44,21 +44,21 @@ def extract_text(file_path: str) -> str:
 def _extract_pdf(path: str) -> str:
     text = ""
 
-    # ── Library 1: PyPDF2 ────────────────────────────────────────────────────
+    # ── Library 1: PyMuPDF (fitz) ────────────────────────────────────────────
     try:
-        import PyPDF2
-        with open(path, 'rb') as f:
-            reader = PyPDF2.PdfReader(f)
-            for page in reader.pages:
-                page_text = page.extract_text() or ""
-                text += page_text + "\n"
+        import fitz
+        with fitz.open(path) as doc:
+            for page in doc:
+                text += page.get_text() + "\n"
         text = text.strip()
         if text:
-            print(f"[ResumeParser] PDF parsed successfully with PyPDF2 ({len(text)} chars).")
+            print(f"[ResumeParser] PDF parsed successfully with PyMuPDF ({len(text)} chars).")
             return text
-        print("[ResumeParser] PyPDF2 returned empty — trying pdfplumber.")
+        print("[ResumeParser] PyMuPDF returned empty — trying pdfplumber.")
+    except ImportError:
+        print("[ResumeParser] PyMuPDF not installed — trying pdfplumber.")
     except Exception as e:
-        print(f"[ResumeParser] PyPDF2 failed: {e} — trying pdfplumber.")
+        print(f"[ResumeParser] PyMuPDF failed: {e} — trying pdfplumber.")
 
     # ── Library 2: pdfplumber ────────────────────────────────────────────────
     try:
@@ -73,24 +73,29 @@ def _extract_pdf(path: str) -> str:
         if text:
             print(f"[ResumeParser] PDF parsed successfully with pdfplumber ({len(text)} chars).")
             return text
-        print("[ResumeParser] pdfplumber returned empty — trying pdfminer.")
+        print("[ResumeParser] pdfplumber returned empty — trying PyPDF2.")
     except ImportError:
-        print("[ResumeParser] pdfplumber not installed — trying pdfminer.")
+        print("[ResumeParser] pdfplumber not installed — trying PyPDF2.")
     except Exception as e:
-        print(f"[ResumeParser] pdfplumber failed: {e} — trying pdfminer.")
+        print(f"[ResumeParser] pdfplumber failed: {e} — trying PyPDF2.")
 
-    # ── Library 3: pdfminer.six ──────────────────────────────────────────────
+    # ── Library 3: PyPDF2 ────────────────────────────────────────────────────
     try:
-        from pdfminer.high_level import extract_text as pdfminer_extract
-        text = pdfminer_extract(path).strip()
+        import PyPDF2
+        with open(path, 'rb') as f:
+            reader = PyPDF2.PdfReader(f)
+            for page in reader.pages:
+                page_text = page.extract_text() or ""
+                text += page_text + "\n"
+        text = text.strip()
         if text:
-            print(f"[ResumeParser] PDF parsed successfully with pdfminer ({len(text)} chars).")
+            print(f"[ResumeParser] PDF parsed successfully with PyPDF2 ({len(text)} chars).")
             return text
-        print("[ResumeParser] pdfminer also returned empty — PDF appears to be image-based.")
+        print("[ResumeParser] PyPDF2 returned empty — PDF appears to be image-based.")
     except ImportError:
-        print("[ResumeParser] pdfminer not installed.")
+        print("[ResumeParser] PyPDF2 not installed.")
     except Exception as e:
-        print(f"[ResumeParser] pdfminer failed: {e}")
+        print(f"[ResumeParser] PyPDF2 failed: {e}")
 
     return ""
 

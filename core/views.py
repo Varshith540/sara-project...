@@ -46,6 +46,11 @@ def upload_resume(request):
             file_ext        = os.path.splitext(uploaded_file.name)[1].lower()
             is_image        = file_ext in ('.jpg', '.jpeg', '.png')
 
+            # ---- 5MB Size Limit Check ----
+            if uploaded_file.size > 5 * 1024 * 1024:
+                messages.error(request, "⚠️ File size exceeds 5MB. Please upload a smaller resume to continue.")
+                return render(request, 'core/upload.html', {'form': form})
+
             # ---- Save resume record (so we get a file path) ----------------
             resume = Resume(file=uploaded_file)
             resume.save()
@@ -82,27 +87,15 @@ def upload_resume(request):
                     raw_text = ''
 
                 if not raw_text and file_ext == '.pdf':
-                    # ── Scanned / image-based PDF ────────────────────────────
-                    # Text extraction failed; try Vision AI automatically.
-                    print(f"[UPLOAD] PDF text empty — routing '{uploaded_file.name}' to Vision AI (scanned PDF).")
-                    try:
-                        vision_data = analyze_resume_image_with_gemini(file_path, job_description)
-                    except TimeoutError as te:
-                        resume.delete()
-                        messages.error(request, f"⏱️ Connection Timeout: {te}")
-                        return render(request, 'core/upload.html', {'form': form})
-                    if not vision_data:
-                        resume.delete()
-                        messages.error(
-                            request,
-                            "⚠️ Scanning failed. The PDF appears to be scanned/image-based and "
-                            "Vision AI could not read it. Please ensure the file is not "
-                            "password-protected or corrupted, or try uploading a JPG/PNG photo instead."
-                        )
-                        return render(request, 'core/upload.html', {'form': form})
+                    # ── Scanned / empty PDF ────────────────────────────
+                    print(f"[UPLOAD] PDF text empty — '{uploaded_file.name}' could not be parsed.")
+                    resume.delete()
+                    messages.error(
+                        request,
+                        "We couldn't read this PDF text. Please try a smaller or text-based PDF."
+                    )
+                    return render(request, 'core/upload.html', {'form': form})
 
-                    raw_text    = vision_data.pop('ocr_text', '') or '[Scanned PDF — text extracted by Vision AI]'
-                    gemini_data = vision_data   # already has ai_summary, suggestions, etc.
 
                 elif not raw_text:
                     # ── DOCX or other format returned empty ──────────────────
