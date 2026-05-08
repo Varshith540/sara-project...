@@ -14,8 +14,8 @@ class Resume(models.Model):
     email           = models.EmailField(blank=True, default='')
     phone           = models.CharField(max_length=30, blank=True, default='')
     target_industry = models.CharField(max_length=100, blank=True, default='')
-    file            = models.FileField(upload_to='resumes/')
-    profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
+    file            = models.FileField(upload_to='resumes/', max_length=255)
+    profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True, max_length=255)
     raw_text        = models.TextField(blank=True, default='')
     uploaded_at     = models.DateTimeField(default=timezone.now)
 
