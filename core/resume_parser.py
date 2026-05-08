@@ -108,6 +108,49 @@ def _extract_pdf(path: str) -> str:
     except Exception as e:
         print(f"[ResumeParser] PyPDF2 failed: {e}")
 
+    # ── Vision OCR Fallback (Scanned PDF Detection) ──────────────────────────
+    print("[ResumeParser] All text extractors returned empty. Treating as scanned PDF. Initiating Vision OCR...")
+    try:
+        import fitz
+        from google import genai
+        import os
+        from django.conf import settings
+        
+        # 1. Convert first page to low-quality JPEG (Memory Guarded)
+        with fitz.open(path) as doc:
+            page = doc.load_page(0)
+            mat = fitz.Matrix(150 / 72, 150 / 72)  # 150 DPI for low-RAM usage
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            img_bytes = pix.tobytes('jpeg')
+            del page
+            del pix
+            
+        import gc; gc.collect()
+        
+        # 2. Gemini Vision Call
+        api_key = getattr(settings, 'GEMINI_API_KEY', '').strip()
+        if api_key and api_key != 'your_gemini_api_key_here':
+            client = genai.Client(api_key=api_key)
+            
+            response = client.models.generate_content(
+                model='gemini-1.5-flash',
+                contents=[
+                    "Extract all text from this resume image professionally. Output only the extracted text.",
+                    {'mime_type': 'image/jpeg', 'data': img_bytes}
+                ]
+            )
+            text = response.text.strip()
+            if text:
+                print(f"[ResumeParser] Vision OCR successful ({len(text)} chars).")
+                return text
+        else:
+            print("[ResumeParser] Gemini API key missing for Vision OCR fallback.")
+            
+    except Exception as e:
+        if "MemoryError" in str(type(e)) or "Memory" in str(e) or "OOM" in str(e) or "cannot allocate" in str(e).lower():
+            raise Exception("This image PDF is too large for our beta server. Please use a text-based PDF.")
+        print(f"[ResumeParser] Vision OCR failed: {e}")
+
     return ""
 
 
