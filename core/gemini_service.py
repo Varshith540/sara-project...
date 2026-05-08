@@ -290,47 +290,18 @@ class SreAIRouter:
         resp.raise_for_status()
         return resp.json()['choices'][0]['message']['content'].strip()
 
-    # ── FORMATTING route  (Cascading Fallback Array → Gemini) ───────────────
+    # ── FORMATTING route  (Gemini → Cascading Fallback Array) ───────────────
     def route_formatting(self, prompt: str) -> tuple[str, str]:
         """
         Deep text reasoning: ATS analysis, resume rewriting.
         Priority: 
-          1. Cascading Fallback Array on OpenRouter
-          2. Gemini (original primary, last resort)
+          1. Gemini 1.5 Flash (Primary)
+          2. Cascading Fallback Array on OpenRouter (Llama-3, etc)
         """
-        or_key = getattr(settings, 'OPENROUTER_API_KEY', '').strip()
-        
-        fallback_models = [
-            'meta-llama/llama-3.3-70b-instruct:free',
-            'openrouter/free'
-        ]
-
-        messages = [
-            {'role': 'system', 'content': _OPENROUTER_SYSTEM_PROMPT},
-            {'role': 'user',   'content': prompt},
-        ]
-
-        # ① OpenRouter Cascading Fallback Array
-        if or_key:
-            print('[Sre AI ▶ FORMATTING] Initiating OpenRouter Cascading Fallback Array...')
-            for model_name in fallback_models:
-                print(f'[Sre AI ▶ FORMATTING] Trying model: {model_name}...')
-                try:
-                    raw = self._or_post(or_key, model_name, messages)
-                    label = f'OpenRouter ({model_name.split("/")[-1]})'
-                    print(f'[Sre AI ✓] Formatting succeeded with {label}.')
-                    return raw, label
-                except requests.exceptions.RequestException as e:
-                    logger.warning(f'[Sre AI] Model {model_name} failed: {e}... Moving to next.')
-                except Exception as e:
-                    logger.warning(f'[Sre AI] Model {model_name} failed: {e}... Moving to next.')
-        else:
-            print('[Sre AI ▶ FORMATTING] No OpenRouter key configured, skipping Fallback Array.')
-
-        # ② Gemini (last resort for formatting — slowest but most capable)
+        # ① Gemini (Primary for fast throughput)
         client = _get_client()
         if client:
-            print('[Sre AI ▶ FORMATTING] Falling back to direct Gemini API...')
+            print('[Sre AI ▶ FORMATTING] Attempting direct Gemini API (gemini-1.5-flash)...')
             for model in [MODEL_NAME] + FALLBACKS:
                 try:
                     resp  = client.models.generate_content(model=model,
@@ -339,11 +310,40 @@ class SreAIRouter:
                     print(f'[Sre AI ✓] Formatting succeeded with {label}.')
                     return resp.text.strip(), label
                 except Exception as e:
-                    logger.warning(f'[Sre AI] Gemini {model} failed: {e}')
+                    logger.warning(f'[Sre AI] Gemini {model} failed: {str(e)[:200]}')
+
+        # ② OpenRouter Cascading Fallback Array
+        or_key = getattr(settings, 'OPENROUTER_API_KEY', '').strip()
+        fallback_models = [
+            'meta-llama/llama-3.3-70b-instruct:free',
+            'openrouter/free'
+        ]
+        
+        messages = [
+            {'role': 'system', 'content': _OPENROUTER_SYSTEM_PROMPT},
+            {'role': 'user',   'content': prompt},
+        ]
+
+        if or_key:
+            print('[Sre AI ▶ FORMATTING] Gemini failed/exhausted. Initiating OpenRouter Fallback Array...')
+            for model_name in fallback_models:
+                print(f'[Sre AI ▶ FORMATTING] Trying model: {model_name}...')
+                try:
+                    raw = self._or_post(or_key, model_name, messages)
+                    label = f'OpenRouter ({model_name.split("/")[-1]})'
+                    print(f'[Sre AI ✓] Formatting succeeded with {label}.')
+                    return raw, label
+                except requests.exceptions.RequestException as e:
+                    err_msg = str(e.response.text) if hasattr(e, 'response') and e.response else str(e)
+                    logger.warning(f'[Sre AI] OpenRouter Model {model_name} failed: {err_msg[:200]}... Moving to next.')
+                except Exception as e:
+                    logger.warning(f'[Sre AI] OpenRouter Model {model_name} failed: {str(e)[:200]}... Moving to next.')
+        else:
+            print('[Sre AI ▶ FORMATTING] No OpenRouter key configured, skipping Fallback Array.')
 
         raise RuntimeError(
             '[Sre AI] All FORMATTING backends exhausted. '
-            'Check OPENROUTER_API_KEY and GEMINI_API_KEY.'
+            'Both Gemini API and OpenRouter models failed.'
         )
 
     # ── RESEARCH route  (Gemini-only — real-time web grounding) ──────────────
