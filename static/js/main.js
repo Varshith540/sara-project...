@@ -102,14 +102,19 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     function performUpload(formData, text, loading) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s timeout
+
       fetch(uploadForm.action || window.location.href, {
         method: 'POST',
         body: formData,
+        signal: controller.signal,
         headers: {
           'X-Requested-With': 'XMLHttpRequest'
         }
       })
       .then(async response => {
+        clearTimeout(timeoutId);
         if (response.status === 429) {
           throw new Error('MEM_LIMIT_REACHED');
         }
@@ -152,7 +157,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       })
       .catch(error => {
-        if (error.message === 'MEM_LIMIT_REACHED') {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          alert("Server is taking longer than usual due to file size. Please check 'History' in a minute.");
+        } else if (error.message === 'MEM_LIMIT_REACHED') {
           showBetaModal();
         } else {
           alert('Network or Server Error: ' + error.message);
@@ -194,7 +202,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
       document.getElementById('proceedCompressBtn').addEventListener('click', () => {
         bsModal.hide();
-        formData.append('force_compress', 'true');
+        // Reconstruct form data to ensure no fields (like target_industry) are lost
+        const freshFormData = new FormData(uploadForm);
+        freshFormData.append('force_compress', 'true');
+        
         // Reset loader UI
         if (text) text.classList.add('d-none');
         if (loading) {
@@ -202,7 +213,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const loadingText = loading.querySelector('span');
             if (loadingText) loadingText.innerHTML = ` <i class="bi bi-hourglass-split"></i> Preparing Compression...`;
         }
-        performUpload(formData, text, loading);
+        performUpload(freshFormData, text, loading);
       });
 
       const cancelAction = () => {

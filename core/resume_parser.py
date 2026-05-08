@@ -117,10 +117,13 @@ def _extract_pdf(path: str) -> str:
         import io
         from django.conf import settings
         
-        # 1. Convert first 2 pages to low-quality JPEG (Memory Guarded)
+        import os
+        file_size_mb = os.path.getsize(path) / (1024 * 1024)
+        max_pages = 3 if file_size_mb > 10 else 5
+        
         img_payloads = ["Extract all text from these resume images professionally. Output only the extracted text."]
         with fitz.open(path) as doc:
-            for page_num in range(min(2, len(doc))):
+            for page_num in range(min(max_pages, len(doc))):
                 page = doc.load_page(page_num)
                 mat = fitz.Matrix(150 / 72, 150 / 72)  # 150 DPI
                 pix = page.get_pixmap(matrix=mat, alpha=False)
