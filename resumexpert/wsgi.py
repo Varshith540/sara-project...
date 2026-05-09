@@ -41,3 +41,40 @@ try:
     logger.info("[SRG] Keep-Alive Guardian thread started.")
 except Exception as e:
     logger.error(f"[SRG] Failed to start Guardian thread: {e}")
+
+# ---------------------------------------------------------------------------
+# Predictive Throttling (Safe Mode Monitor)
+# ---------------------------------------------------------------------------
+import psutil
+
+def _memory_monitor():
+    """
+    Monitors system RAM. If usage > 85%, creates a sentinel lock file.
+    The backend views.py will check this lock and reject heavy tasks if present,
+    forcing users to rely on Edge Computing.
+    """
+    lock_path = '/tmp/SAFE_MODE.lock'
+    while True:
+        try:
+            time.sleep(30)
+            mem = psutil.virtual_memory()
+            if mem.percent > 85.0:
+                if not os.path.exists(lock_path):
+                    with open(lock_path, 'w') as f:
+                        f.write(str(time.time()))
+                    logger.warning(f"[Safe Mode] CRITICAL MEMORY ({mem.percent}%). Safe Mode Engaged.")
+            else:
+                if os.path.exists(lock_path):
+                    # Give it a small buffer, e.g., if it drops below 75% we disable Safe Mode
+                    if mem.percent < 75.0:
+                        os.remove(lock_path)
+                        logger.info(f"[Safe Mode] Memory stable ({mem.percent}%). Safe Mode Disengaged.")
+        except Exception as e:
+            logger.error(f"[Safe Mode] Monitor failed: {e}")
+
+try:
+    tm = threading.Thread(target=_memory_monitor, daemon=True)
+    tm.start()
+    logger.info("[Safe Mode] Predictive Throttling monitor started.")
+except Exception as e:
+    logger.error(f"[Safe Mode] Failed to start monitor thread: {e}")
