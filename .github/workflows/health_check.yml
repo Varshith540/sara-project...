@@ -1,0 +1,41 @@
+name: Phoenix Protocol Health Check & Auto-Rollback
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  health-monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Wait for Render Deployment
+        run: sleep 60
+
+      - name: Check Server Health
+        id: health_check
+        run: |
+          for i in {1..9}; do
+            STATUS=$(curl -o /dev/null -s -w "%{http_code}" ${{ secrets.APP_URL }}/ping/)
+            if [ $STATUS -eq 200 ]; then
+              echo "Server is Healthy"
+              exit 0
+            fi
+            echo "Attempt $i: Server not ready (Status: $STATUS). Waiting..."
+            sleep 20
+          done
+          echo "Server Failed Health Check!"
+          exit 1
+
+      - name: Auto-Rollback on Failure
+        if: failure()
+        run: |
+          git config --global user.name "Sre-AI-Guardian"
+          git config --global user.email "sre-ai@anti-gravity.com"
+          git revert HEAD --no-edit
+          git push origin main
+          echo "🚨 CRITICAL: Rollback triggered. Previous stable state restored."
