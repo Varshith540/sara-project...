@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const submitBtn  = document.getElementById('submitBtn');
 
   if (uploadForm && submitBtn) {
-    uploadForm.addEventListener('submit', function (e) {
+    uploadForm.addEventListener('submit', async function (e) {
       e.preventDefault(); // Intercept standard submission
 
       const text    = submitBtn.querySelector('.btn-text');
@@ -91,13 +91,46 @@ document.addEventListener('DOMContentLoaded', function () {
       if (text)    text.classList.add('d-none');
       if (loading) {
           loading.classList.remove('d-none');
-          // Sri AI memory optimization feedback
-          const loadingText = loading.querySelector('span');
+          const loadingText = loading.querySelector('span:not(.spinner-border)');
           if (loadingText) loadingText.textContent = " Sri AI is optimizing memory...";
       }
       submitBtn.disabled = true;
 
       const formData = new FormData(uploadForm);
+      const fileInput = uploadForm.querySelector('input[type="file"]');
+      const file = fileInput ? fileInput.files[0] : null;
+
+      // ── EDGE COMPUTING: Client-Side Rendering (> 5MB PDF) ─────────────────
+      if (file && file.size > 5 * 1024 * 1024 && file.type === 'application/pdf' && typeof pdfjsLib !== 'undefined') {
+          try {
+              if (loading) {
+                  const loadingText = loading.querySelector('span:not(.spinner-border)');
+                  if (loadingText) loadingText.innerHTML = " <i class='bi bi-cpu'></i> Edge Computing: Processing document securely on device...";
+              }
+              
+              const arrayBuffer = await file.arrayBuffer();
+              const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+              const maxPages = Math.min(2, pdf.numPages);
+              
+              for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+                  const page = await pdf.getPage(pageNum);
+                  const viewport = page.getViewport({ scale: 1.0 }); // ~72 DPI
+                  const canvas = document.createElement('canvas');
+                  const ctx = canvas.getContext('2d');
+                  canvas.width = viewport.width;
+                  canvas.height = viewport.height;
+                  
+                  await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                  const base64Jpeg = canvas.toDataURL('image/jpeg', 0.6); // 60% compression
+                  formData.append('edge_processed_images[]', base64Jpeg);
+              }
+              // Delete the original massive binary file to save bandwidth and server RAM
+              formData.delete(fileInput.name);
+          } catch (err) {
+              console.error("[Edge Computing] PDF render failed, falling back to binary upload:", err);
+          }
+      }
+
       performUpload(formData, text, loading);
     });
 
@@ -122,6 +155,9 @@ document.addEventListener('DOMContentLoaded', function () {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let etaInterval = null;
+        let currentEta = 0;
+        let etaSpan = null;
         
         while (true) {
           const {done, value} = await reader.read();
@@ -137,12 +173,32 @@ document.addEventListener('DOMContentLoaded', function () {
               const data = JSON.parse(line);
               
               if (data.step === 'large_file_detected') {
+                if (etaInterval) clearInterval(etaInterval);
                 showLargeFileModal(data.msg, formData, text, loading);
                 return; // Gracefully exit stream
+              } else if (data.step === 'eta') {
+                currentEta = data.seconds;
+                if (!etaSpan) {
+                    etaSpan = document.createElement('span');
+                    etaSpan.className = 'ms-2 badge bg-dark opacity-75';
+                    if (loading) loading.appendChild(etaSpan);
+                }
+                if (etaInterval) clearInterval(etaInterval);
+                etaSpan.innerHTML = `<i class="bi bi-clock-history me-1"></i>ETA: ${currentEta}s`;
+                etaInterval = setInterval(() => {
+                    if (currentEta > 0) {
+                        currentEta--;
+                        etaSpan.innerHTML = `<i class="bi bi-clock-history me-1"></i>ETA: ${currentEta}s`;
+                    } else {
+                        etaSpan.innerHTML = `<i class="bi bi-clock-history me-1"></i>Almost done...`;
+                        clearInterval(etaInterval);
+                    }
+                }, 1000);
               } else if (data.step && data.step !== 'success' && data.step !== 'error' && data.step !== 'MEM_LIMIT_REACHED') {
-                const loadingText = loading.querySelector('span');
+                const loadingText = loading.querySelector('span:not(.spinner-border):not(.badge)');
                 if (loadingText) loadingText.innerHTML = ` <i class="bi bi-hourglass-split"></i> ${data.msg}`;
               } else if (data.step === 'success') {
+                if (etaInterval) clearInterval(etaInterval);
                 window.location.href = data.redirect;
                 return;
               } else if (data.step === 'MEM_LIMIT_REACHED') {

@@ -19,4 +19,6 @@ urlpatterns = [
     path('api/chat/',                 views.sri_ai_chat,    name='sri_ai_chat'),
     path('resume/<int:pk>/upload-photo/', views.upload_resume_photo, name='upload_resume_photo'),
     path('builder/',                  views.resume_builder, name='resume_builder'),
+    path('api/compare/',              views.compare_resumes,name='api_compare_resumes'),
+    path('ping/',                     views.ping_alive,     name='ping_alive'),
 ]

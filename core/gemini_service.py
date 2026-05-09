@@ -95,17 +95,22 @@ STRICT DATA VALIDATION RULES — follow these without exception:
    - A year range such as "2020-2022" or "2019–2023" has exactly 4+4 = 8 digits but
      matches the pattern YYYY[-–]YYYY or YYYY[-–]present. Always classify these as dates.
 
-7. LANGUAGE & TONE:
-   - Responses must be professional, concise, and actionable.
+7. LANGUAGE & TONE (SRE EXPERT IDEOLOGY):
+   - Act as an elite Enterprise SRE and Career Consultant. 
+   - Responses must be hyper-concise, analytical, and heavily optimized for minimum output tokens (Token Optimization). Verbose output wastes compute.
+   - Employ "Prompt Chaining" ideology: focus only on the specific request payload.
 
 8. ACCURACY OVER CREATIVITY:
    - Do not fabricate or hallucinate contact details, companies, or qualifications.
 
-9. SCHEMA COMPLIANCE:
+9. SCHEMA COMPLIANCE (ZERO-WASTE EXECUTION):
    - Always return every key specified in the user prompt's JSON schema.
-   - If a list is expected, return a list even if it has only one item.
-"""
+   - Do NOT use filler words. Deliver high-impact, direct data perfectly formatted for the system's caching layer.
 
+10. COLD START AWARENESS (SRE PROTOCOL):
+    - If the user context implies a massive delay before response (e.g., Render Server Wake-up), do not apologize defensively. 
+    - Acknowledge the cold start professionally if asked, e.g., "Sri AI engines are fully warmed up and active after the hibernation cycle."
+"""
 
 def _sanitise_phone(phone: str) -> str:
     """
@@ -591,7 +596,7 @@ def convert_pdf_to_jpeg(pdf_path: str, dpi: int = 150) -> bytes | None:
 # ---------------------------------------------------------------------------
 # Multimodal: Analyse a resume IMAGE or SCANNED PDF (OCR + Analysis)
 # ---------------------------------------------------------------------------
-def analyze_resume_image_with_gemini(image_path: str, job_description: str) -> dict:
+def analyze_resume_image_with_gemini(image_path: str, job_description: str, edge_images=None) -> dict:
     """
     Analyse a resume IMAGE or SCANNED PDF using Vision AI.
 
@@ -615,37 +620,55 @@ def analyze_resume_image_with_gemini(image_path: str, job_description: str) -> d
     import requests as _req
 
     client    = _get_client()
-    mime_type, _ = mimetypes.guess_type(image_path)
-    mime_type = mime_type or 'image/jpeg'
-    is_pdf    = mime_type == 'application/pdf'
+    
+    image_bytes_list = []
+    
+    if edge_images:
+        print(f'[Vision] Edge Computing payload detected. Bypassing backend compression.')
+        for img in edge_images:
+            if ',' in img:
+                b64_str = img.split(',', 1)[1]
+            else:
+                b64_str = img
+            image_bytes_list.append(base64.b64decode(b64_str))
+        mime_type = 'image/jpeg'
+        is_pdf = False
+        image_bytes = image_bytes_list[0]
+        kb = sum(len(b) for b in image_bytes_list) // 1024
+        print(f'[Vision] Edge payload loaded: {len(image_bytes_list)} pages, {kb} KB total.')
+    else:
+        mime_type, _ = mimetypes.guess_type(image_path)
+        mime_type = mime_type or 'image/jpeg'
+        is_pdf    = mime_type == 'application/pdf'
 
-    # ── Pre-process: PDF → compressed JPEG ───────────────────────────────────
-    if is_pdf:
-        print(f'[Vision] Scanned PDF detected — converting page-1 to JPEG for Vision AI...')
-        jpeg_bytes = convert_pdf_to_jpeg(image_path, dpi=150)
-        if jpeg_bytes:
-            image_bytes = jpeg_bytes
-            mime_type   = 'image/jpeg'
-            kb = len(image_bytes) // 1024
-            print(f'[Vision] Using pre-processed JPEG ({kb} KB) instead of raw PDF.')
+        # ── Pre-process: PDF → compressed JPEG ───────────────────────────────────
+        if is_pdf:
+            print(f'[Vision] Scanned PDF detected — converting page-1 to JPEG for Vision AI...')
+            jpeg_bytes = convert_pdf_to_jpeg(image_path, dpi=150)
+            if jpeg_bytes:
+                image_bytes = jpeg_bytes
+                mime_type   = 'image/jpeg'
+                kb = len(image_bytes) // 1024
+                print(f'[Vision] Using pre-processed JPEG ({kb} KB) instead of raw PDF.')
+            else:
+                # Pre-processing unavailable — try sending raw PDF (may timeout on large files)
+                print('[Vision] PDF pre-processing unavailable — sending raw PDF bytes (may be slow).')
+                try:
+                    with open(image_path, 'rb') as f:
+                        image_bytes = f.read()
+                except Exception as exc:
+                    logger.error(f'[Vision] Could not read PDF {image_path}: {exc}')
+                    yield {"step": "error", "msg": "Could not read uploaded PDF file."}
+                    return
         else:
-            # Pre-processing unavailable — try sending raw PDF (may timeout on large files)
-            print('[Vision] PDF pre-processing unavailable — sending raw PDF bytes (may be slow).')
             try:
                 with open(image_path, 'rb') as f:
                     image_bytes = f.read()
+                kb = len(image_bytes) // 1024
+                print(f'[Vision] Image file loaded: {kb} KB, mime={mime_type}.')
             except Exception as exc:
-                logger.error(f'[Vision] Could not read PDF {image_path}: {exc}')
+                logger.error(f'[Vision] Could not read file {image_path}: {exc}')
                 return {}
-    else:
-        try:
-            with open(image_path, 'rb') as f:
-                image_bytes = f.read()
-            kb = len(image_bytes) // 1024
-            print(f'[Vision] Image file loaded: {kb} KB, mime={mime_type}.')
-        except Exception as exc:
-            logger.error(f'[Vision] Could not read file {image_path}: {exc}')
-            return {}
 
     image_b64 = base64.b64encode(image_bytes).decode('utf-8')
     doc_label = 'SCANNED PDF (page 1)' if is_pdf else 'IMAGE'
@@ -703,12 +726,16 @@ JSON Schema:
         for model in [MODEL_NAME] + FALLBACKS:
             try:
                 # User-requested explicit Dictionary payload structure to bypass Pydantic errors
+                dict_parts = [{'text': vision_prompt}]
+                if edge_images:
+                    for b in image_bytes_list:
+                        dict_parts.append({'mime_type': mime_type, 'data': b})
+                else:
+                    dict_parts.append({'mime_type': mime_type, 'data': image_bytes})
+                    
                 dict_payload = [{
                     'role': 'user',
-                    'parts': [
-                        {'text': vision_prompt},
-                        {'mime_type': mime_type, 'data': image_bytes}
-                    ]
+                    'parts': dict_parts
                 }]
                 
                 response = client.models.generate_content(
@@ -1286,3 +1313,53 @@ Sri AI:"""
     except Exception as exc:
         logger.error(f"[Gemini] chat_with_sri_ai failed: {exc}")
         return "I encountered an error trying to process your request."
+
+# ---------------------------------------------------------------------------
+# Resume Comparison Engine (Match Matrix)
+# ---------------------------------------------------------------------------
+def compare_resumes_with_gemini(resume1_text: str, resume2_text: str, job_description: str) -> dict:
+    """
+    Compare two resumes against a single job description.
+    Yields a 'Match Matrix' dict for enterprise-grade comparison.
+    """
+    client = _get_client()
+    if client is None:
+        yield {"step": "error", "msg": "Gemini Client not available."}
+        return
+
+    prompt = f"""You are 'Sri AI', an elite Enterprise SRE and HR Consultant.
+Compare the following two resumes against the job description and output a strict JSON Match Matrix. Focus on actionable data and token efficiency.
+
+Job Description:
+{job_description[:1000]}
+
+Resume 1:
+{resume1_text[:2000]}
+
+Resume 2:
+{resume2_text[:2000]}
+
+Output STRICT JSON matching exactly this schema:
+{{
+  "winner": "1 or 2",
+  "reasoning": "1 sentence explanation",
+  "resume1_score": <int>,
+  "resume2_score": <int>,
+  "resume1_pros": ["pro1", "pro2"],
+  "resume2_pros": ["pro1", "pro2"],
+  "resume1_cons": ["con1"],
+  "resume2_cons": ["con1"]
+}}"""
+
+    try:
+        yield {"step": "compare", "msg": "Sri AI is calculating the Enterprise Match Matrix..."}
+        raw, active_model = _generate(client, prompt, task_type=SreAIRouter.FORMATTING)
+        raw = re.sub(r'^```(?:json)?\s*', '', raw)
+        raw = re.sub(r'\s*```$', '', raw)
+        data = json.loads(raw, strict=False)
+        data['active_model'] = active_model
+        yield data
+    except Exception as exc:
+        yield {"step": "error", "msg": "Sri AI failed to generate the Match Matrix."}
+        logger.warning(f"[Gemini] compare_resumes_with_gemini failed: {exc}")
+        yield {}

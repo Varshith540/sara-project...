@@ -479,13 +479,25 @@ def _process_upload_stream(request, form):
     temp_files = []
 
     try:
-        uploaded_file   = request.FILES['resume_file']
         job_description = form.cleaned_data['job_description']
         manual_name     = form.cleaned_data.get('full_name', '').strip()
-        file_ext        = os.path.splitext(uploaded_file.name)[1].lower()
-        is_image        = file_ext in ('.jpg', '.jpeg', '.png')
-        file_size       = uploaded_file.size
         force_compress  = request.POST.get('force_compress') == 'true'
+        
+        edge_images = request.POST.getlist('edge_processed_images[]')
+        
+        if edge_images:
+            uploaded_file = None
+            is_image = True
+            file_ext = '.jpg'
+            file_size = sum(len(img) for img in edge_images)
+        else:
+            uploaded_file   = request.FILES.get('resume_file')
+            if not uploaded_file:
+                yield send_error("⚠️ No file or edge data provided.")
+                return
+            file_ext        = os.path.splitext(uploaded_file.name)[1].lower()
+            is_image        = file_ext in ('.jpg', '.jpeg', '.png')
+            file_size       = uploaded_file.size
 
         yield send_status('validation', "File Received. Starting Validation...")
 
@@ -503,9 +515,28 @@ def _process_upload_stream(request, form):
             }) + '\n'
             return
 
-        resume = Resume(file=uploaded_file)
-        resume.save()
-        file_path = resume.file.path
+        # ── Dynamic ETA Logic ────────────────────────────────────────────────
+        eta_seconds = 25
+        if is_image or file_ext == '.pdf':
+            if file_size > 10 * 1024 * 1024:
+                eta_seconds = 150
+            elif is_image or (file_size > 2 * 1024 * 1024):
+                eta_seconds = 75
+        yield json.dumps({"step": "eta", "seconds": eta_seconds}) + '\n'
+
+        if uploaded_file:
+            resume = Resume(file=uploaded_file)
+            resume.save()
+            file_path = resume.file.path
+        else:
+            import base64
+            from django.core.files.base import ContentFile
+            # Decode the first edge-processed image to satisfy the DB FileField
+            img_data = base64.b64decode(edge_images[0].split(',')[1])
+            resume = Resume()
+            resume.file.save('edge_processed.jpg', ContentFile(img_data), save=True)
+            file_path = resume.file.path
+            
         temp_files.append(file_path)
 
         # ── Adaptive Compression (> 5MB) ─────────────────────────────────────
@@ -539,7 +570,7 @@ def _process_upload_stream(request, form):
         if is_image:
             try:
                 vision_data = {}
-                for update in analyze_resume_image_with_gemini(file_path, job_description):
+                for update in analyze_resume_image_with_gemini(file_path, job_description, edge_images=edge_images):
                     if isinstance(update, dict) and 'step' in update:
                         yield send_status(update['step'], update['msg'])
                     elif isinstance(update, dict):
@@ -637,3 +668,54 @@ def _process_upload_stream(request, form):
                 except Exception:
                     pass
         gc.collect()
+
+# ---------------------------------------------------------------------------
+# API: Resume Comparison Engine
+# ---------------------------------------------------------------------------
+from django.views.decorators.csrf import csrf_exempt
+from django.http import StreamingHttpResponse
+
+@csrf_exempt
+def compare_resumes(request):
+    """
+    API endpoint to compare two resumes against a JD.
+    Expects POST with 'resume1', 'resume2' texts and 'job_description'.
+    Returns NDJSON stream.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    resume1_text = request.POST.get('resume1', '').strip()
+    resume2_text = request.POST.get('resume2', '').strip()
+    jd = request.POST.get('job_description', '').strip()
+
+    if not resume1_text or not resume2_text or not jd:
+        return JsonResponse({'error': 'Missing resume1, resume2, or job_description'}, status=400)
+
+    def _compare_stream():
+        yield json.dumps({"step": "init", "msg": "Sri AI is initializing Enterprise Compare Engine..."}) + '\n'
+        from .gemini_service import compare_resumes_with_gemini
+        
+        match_matrix = None
+        for update in compare_resumes_with_gemini(resume1_text, resume2_text, jd):
+            if isinstance(update, dict) and 'step' in update:
+                yield json.dumps(update) + '\n'
+            elif isinstance(update, dict):
+                match_matrix = update
+        
+        if match_matrix:
+            yield json.dumps({"step": "success", "data": match_matrix}) + '\n'
+        else:
+            yield json.dumps({"step": "error", "msg": "Failed to generate Match Matrix."}) + '\n'
+
+    return StreamingHttpResponse(_compare_stream(), content_type='application/x-ndjson')
+
+# ---------------------------------------------------------------------------
+# Heartbeat Endpoint (System Reliability Guardian)
+# ---------------------------------------------------------------------------
+def ping_alive(request):
+    """
+    Ultra-lightweight endpoint to keep the Render server awake.
+    Does not touch the DB or AI models.
+    """
+    return JsonResponse({"status": "alive"})
