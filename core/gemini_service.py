@@ -686,7 +686,7 @@ Job Description:
 STRICT RULES:
 - Phone Number must ONLY contain numeric digits and formatting chars (+, -, spaces). Date ranges like "2020-2022" are NOT phone numbers.
 - If a field is not found, use "Not Provided".
-- Return ONLY valid JSON, no markdown fences, no extra text.
+- Return ONLY raw, parsable JSON format. Do NOT wrap the response in markdown blocks (e.g., no ```json). No extra text.
 
 JSON Schema:
 {{
