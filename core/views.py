@@ -42,7 +42,17 @@ def upload_resume(request):
             return render(request, 'core/upload.html')
 
         form = ResumeUploadForm(request.POST, request.FILES)
-        if form.is_valid():
+        
+        # ── Level 6 Autonomous Refactoring: Dual-Sided Unified Validation ─────
+        edge_images = request.POST.getlist('edge_processed_images[]')
+        is_valid = form.is_valid()
+        
+        if is_valid:
+            if not request.FILES.get('resume_file') and not edge_images:
+                form.add_error('resume_file', 'Please upload a resume or allow secure Edge processing.')
+                is_valid = False
+                
+        if is_valid:
             if is_ajax:
                 from django.http import StreamingHttpResponse
                 return StreamingHttpResponse(
@@ -235,7 +245,7 @@ def delete_result(request, pk):
 # ---------------------------------------------------------------------------
 def generate_resume(request, pk):
     """Generate (or fetch cached) an AI-rewritten resume tailored to the JD."""
-    result = get_object_or_404(AnalysisResult, pk=pk)
+    result = get_object_or_404(AnalysisResult, resume__pk=pk)
 
     # Allow force-regen by clearing cache
     if request.GET.get('regen') == '1':
@@ -638,13 +648,13 @@ def _process_upload_stream(request, form):
         result = AnalysisResult(
             resume            = resume,
             job_description   = job_description,
-            ats_score         = score_data['ats_score'],
-            skill_match_score = score_data['skill_match_score'],
-            cosine_score      = score_data['cosine_score'],
-            matched_skills    = score_data['matched_skills'],
-            missing_skills    = score_data['missing_skills'],
-            resume_skills     = score_data['resume_skills'],
-            suggestions       = score_data['suggestions'],
+            ats_score         = score_data.get('ats_score', 0),
+            skill_match_score = score_data.get('skill_match_score', 0),
+            cosine_score      = score_data.get('cosine_score', 0),
+            matched_skills    = score_data.get('matched_skills', []),
+            missing_skills    = score_data.get('missing_skills', []),
+            resume_skills     = score_data.get('resume_skills', []),
+            suggestions       = score_data.get('suggestions', []),
             ai_summary        = gemini_data.get('ai_summary', ''),
             ai_suggestions    = gemini_data.get('ai_suggestions', []),
             interview_questions = gemini_data.get('interview_questions', []),
@@ -719,3 +729,26 @@ def ping_alive(request):
     Does not touch the DB or AI models.
     """
     return JsonResponse({"status": "alive"})
+
+# ---------------------------------------------------------------------------
+# Continuous Profiling: Edge Computing Telemetry (Level 7)
+# ---------------------------------------------------------------------------
+@csrf_exempt
+@require_POST
+def edge_telemetry(request):
+    """
+    Receives Edge Computing performance metrics from the client (Fire-and-Forget).
+    Logs to terminal to avoid DB overhead.
+    """
+    try:
+        data = json.loads(request.body)
+        duration = data.get('duration', '0')
+        cores = data.get('cores', 'Unknown')
+        ram = data.get('ram', 'Unknown')
+        status = data.get('status', 'success')
+        
+        print(f"[TELEMETRY] Device: {cores} Cores, {ram}GB RAM | Task: PDF_Edge_Process | Time: {duration}ms | Status: {status}")
+    except Exception:
+        pass # Silent failure to protect main thread
+        
+    return JsonResponse({'status': 'logged'})
