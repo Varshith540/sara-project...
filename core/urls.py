@@ -20,6 +20,5 @@ urlpatterns = [
     path('resume/<int:pk>/upload-photo/', views.upload_resume_photo, name='upload_resume_photo'),
     path('builder/',                  views.resume_builder, name='resume_builder'),
     path('api/compare/',              views.compare_resumes,name='api_compare_resumes'),
-    path('api/telemetry/',            views.edge_telemetry, name='api_telemetry'),
     path('ping/',                     views.ping_alive,     name='ping_alive'),
 ]

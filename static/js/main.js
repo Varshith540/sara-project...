@@ -100,100 +100,34 @@ document.addEventListener('DOMContentLoaded', function () {
       const fileInput = uploadForm.querySelector('input[type="file"]');
       const file = fileInput ? fileInput.files[0] : null;
 
-      // ── EDGE COMPUTING 2.0: Web Worker & Continuous Profiling ───────────────
-      if (file && file.size > 5 * 1024 * 1024 && file.type === 'application/pdf') {
-          // The Capability Pre-Check
-          function checkDeviceCapabilities() {
-              const cores = navigator.hardwareConcurrency || 4; // Default to 4 if API unsupported
-              const ram = navigator.deviceMemory || 4;
-              const hasOffscreenCanvas = typeof OffscreenCanvas !== 'undefined';
-              
-              if (cores < 4 || ram < 2 || !hasOffscreenCanvas) {
-                  return false;
-              }
-              return true;
-          }
-
-          if (!checkDeviceCapabilities()) {
-              console.log("[Edge Compute] Device optimization active. Routing to secure cloud for processing...");
-              if (loading) {
-                  const loadingText = loading.querySelector('span:not(.spinner-border)');
-                  if (loadingText) loadingText.innerHTML = " <i class='bi bi-cloud-arrow-up'></i> Optimization active. Routing to secure cloud...";
-              }
-              performUpload(formData, text, loading);
-              return;
-          }
-
-          // The Web Worker Implementation & Telemetry
+      // ── EDGE COMPUTING: Client-Side Rendering (> 5MB PDF) ─────────────────
+      if (file && file.size > 5 * 1024 * 1024 && file.type === 'application/pdf' && typeof pdfjsLib !== 'undefined') {
           try {
               if (loading) {
                   const loadingText = loading.querySelector('span:not(.spinner-border)');
-                  if (loadingText) loadingText.innerHTML = " <i class='bi bi-cpu'></i> Sri AI is utilizing local Edge Compute...";
+                  if (loadingText) loadingText.innerHTML = " <i class='bi bi-cpu'></i> Edge Computing: Processing document securely on device...";
               }
               
               const arrayBuffer = await file.arrayBuffer();
-              const worker = new Worker('/static/js/worker.js');
-              const startTime = performance.now();
+              const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+              const maxPages = Math.min(2, pdf.numPages);
               
-              worker.postMessage({ arrayBuffer: arrayBuffer });
-              
-              worker.onmessage = function(event) {
-                  const { status, data, error } = event.data;
-                  const duration = (performance.now() - startTime).toFixed(2);
+              for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+                  const page = await pdf.getPage(pageNum);
+                  const viewport = page.getViewport({ scale: 1.0 }); // ~72 DPI
+                  const canvas = document.createElement('canvas');
+                  const ctx = canvas.getContext('2d');
+                  canvas.width = viewport.width;
+                  canvas.height = viewport.height;
                   
-                  // Fire-and-Forget Telemetry
-                  fetch('/api/telemetry/', {
-                      method: 'POST',
-                      headers: {
-                          'Content-Type': 'application/json',
-                          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
-                      },
-                      body: JSON.stringify({
-                          duration: duration,
-                          cores: navigator.hardwareConcurrency || 'Unknown',
-                          ram: navigator.deviceMemory || 'Unknown',
-                          status: status
-                      })
-                  }).catch(e => { /* Silent failure to protect main thread */ });
-
-                  if (status === 'success') {
-                      data.forEach(base64 => {
-                          formData.append('edge_processed_images[]', base64);
-                      });
-                      formData.delete(fileInput.name); // Preserve bandwidth
-                      worker.terminate();
-                      performUpload(formData, text, loading);
-                  } else {
-                      console.log("[Edge Compute] Fallback Protocol active. Re-routing to server.");
-                      worker.terminate();
-                      performUpload(formData, text, loading);
-                  }
-              };
-              
-              worker.onerror = function(err) {
-                  const duration = (performance.now() - startTime).toFixed(2);
-                  fetch('/api/telemetry/', {
-                      method: 'POST',
-                      headers: {
-                          'Content-Type': 'application/json',
-                          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
-                      },
-                      body: JSON.stringify({
-                          duration: duration,
-                          cores: navigator.hardwareConcurrency || 'Unknown',
-                          ram: navigator.deviceMemory || 'Unknown',
-                          status: 'critical_error'
-                      })
-                  }).catch(e => {});
-
-                  console.log("[Edge Compute] Fallback Protocol active. Re-routing to server.");
-                  worker.terminate();
-                  performUpload(formData, text, loading);
-              };
-              
-              return; // Halt main script until worker finishes
+                  await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                  const base64Jpeg = canvas.toDataURL('image/jpeg', 0.6); // 60% compression
+                  formData.append('edge_processed_images[]', base64Jpeg);
+              }
+              // Delete the original massive binary file to save bandwidth and server RAM
+              formData.delete(fileInput.name);
           } catch (err) {
-              console.error("[Edge Compute] Initialization failed, falling back:", err);
+              console.error("[Edge Computing] PDF render failed, falling back to binary upload:", err);
           }
       }
 

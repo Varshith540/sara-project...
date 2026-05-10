@@ -30,7 +30,6 @@ class ResumeUploadForm(forms.Form):
     )
     resume_file = forms.FileField(
         label="Upload Your Resume",
-        required=False,
         widget=forms.FileInput(attrs={
             'class':  'form-control',
             'accept': '.pdf,.docx,.jpg,.jpeg,.png',
