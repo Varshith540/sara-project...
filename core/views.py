@@ -235,7 +235,7 @@ def delete_result(request, pk):
 # ---------------------------------------------------------------------------
 def generate_resume(request, pk):
     """Generate (or fetch cached) an AI-rewritten resume tailored to the JD."""
-    result = get_object_or_404(AnalysisResult, resume__pk=pk)
+    result = get_object_or_404(AnalysisResult, pk=pk)
 
     # Allow force-regen by clearing cache
     if request.GET.get('regen') == '1':
@@ -638,13 +638,13 @@ def _process_upload_stream(request, form):
         result = AnalysisResult(
             resume            = resume,
             job_description   = job_description,
-            ats_score         = score_data.get('ats_score', 0),
-            skill_match_score = score_data.get('skill_match_score', 0),
-            cosine_score      = score_data.get('cosine_score', 0),
-            matched_skills    = score_data.get('matched_skills', []),
-            missing_skills    = score_data.get('missing_skills', []),
-            resume_skills     = score_data.get('resume_skills', []),
-            suggestions       = score_data.get('suggestions', []),
+            ats_score         = score_data['ats_score'],
+            skill_match_score = score_data['skill_match_score'],
+            cosine_score      = score_data['cosine_score'],
+            matched_skills    = score_data['matched_skills'],
+            missing_skills    = score_data['missing_skills'],
+            resume_skills     = score_data['resume_skills'],
+            suggestions       = score_data['suggestions'],
             ai_summary        = gemini_data.get('ai_summary', ''),
             ai_suggestions    = gemini_data.get('ai_suggestions', []),
             interview_questions = gemini_data.get('interview_questions', []),
