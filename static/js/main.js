@@ -100,37 +100,78 @@ document.addEventListener('DOMContentLoaded', function () {
       const fileInput = uploadForm.querySelector('input[type="file"]');
       const file = fileInput ? fileInput.files[0] : null;
 
-      // ── EDGE COMPUTING: Client-Side Rendering (> 5MB PDF) ─────────────────
-      if (file && file.size > 5 * 1024 * 1024 && file.type === 'application/pdf' && typeof pdfjsLib !== 'undefined') {
+      // ── EDGE COMPUTING 2.0: Web Worker & Graceful Degradation ───────────────
+      if (file && file.size > 5 * 1024 * 1024 && file.type === 'application/pdf') {
+          // The Capability Pre-Check
+          function checkDeviceCapabilities() {
+              const cores = navigator.hardwareConcurrency || 4; // Default to 4 if API unsupported
+              const ram = navigator.deviceMemory || 4;
+              const hasOffscreenCanvas = typeof OffscreenCanvas !== 'undefined';
+              
+              console.log(`[Device Check] CPU Cores: ${cores}, RAM: ${ram}GB, OffscreenCanvas: ${hasOffscreenCanvas}`);
+              
+              // If Potato PC (e.g. low cores, low memory, or incompatible browser)
+              if (cores < 4 || ram < 2 || !hasOffscreenCanvas) {
+                  return false;
+              }
+              return true;
+          }
+
+          if (!checkDeviceCapabilities()) {
+              console.log("[Edge Compute] Device optimization active. Routing to secure cloud for processing...");
+              if (loading) {
+                  const loadingText = loading.querySelector('span:not(.spinner-border)');
+                  if (loadingText) loadingText.innerHTML = " <i class='bi bi-cloud-arrow-up'></i> Optimization active. Routing to secure cloud...";
+              }
+              // Proceed normally; bypass local processing
+              performUpload(formData, text, loading);
+              return;
+          }
+
+          // The Web Worker Implementation
           try {
               if (loading) {
                   const loadingText = loading.querySelector('span:not(.spinner-border)');
-                  if (loadingText) loadingText.innerHTML = " <i class='bi bi-cpu'></i> Edge Computing: Processing document securely on device...";
+                  if (loadingText) loadingText.innerHTML = " <i class='bi bi-cpu'></i> Sri AI is utilizing local Edge Compute...";
               }
               
               const arrayBuffer = await file.arrayBuffer();
-              const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-              const maxPages = Math.min(2, pdf.numPages);
+              const worker = new Worker('/static/js/worker.js');
               
-              for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
-                  const page = await pdf.getPage(pageNum);
-                  const viewport = page.getViewport({ scale: 1.0 }); // ~72 DPI
-                  const canvas = document.createElement('canvas');
-                  const ctx = canvas.getContext('2d');
-                  canvas.width = viewport.width;
-                  canvas.height = viewport.height;
-                  
-                  await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-                  const base64Jpeg = canvas.toDataURL('image/jpeg', 0.6); // 60% compression
-                  formData.append('edge_processed_images[]', base64Jpeg);
-              }
-              // Delete the original massive binary file to save bandwidth and server RAM
-              formData.delete(fileInput.name);
+              worker.postMessage({ arrayBuffer: arrayBuffer });
+              
+              worker.onmessage = function(event) {
+                  const { status, data, error } = event.data;
+                  if (status === 'success') {
+                      console.log("[Edge Compute] Web Worker finished off-main-thread processing.");
+                      data.forEach(base64 => {
+                          formData.append('edge_processed_images[]', base64);
+                      });
+                      formData.delete(fileInput.name); // Preserve bandwidth
+                      worker.terminate();
+                      performUpload(formData, text, loading);
+                  } else {
+                      console.error("[Edge Compute] Web Worker failed:", error);
+                      console.log("[Edge Compute] Fallback Protocol active. Re-routing to server.");
+                      worker.terminate();
+                      performUpload(formData, text, loading);
+                  }
+              };
+              
+              worker.onerror = function(err) {
+                  console.error("[Edge Compute] Web Worker critical error:", err.message);
+                  console.log("[Edge Compute] Fallback Protocol active. Re-routing to server.");
+                  worker.terminate();
+                  performUpload(formData, text, loading);
+              };
+              
+              return; // Halt main script until worker finishes
           } catch (err) {
-              console.error("[Edge Computing] PDF render failed, falling back to binary upload:", err);
+              console.error("[Edge Compute] Initialization failed, falling back:", err);
           }
       }
 
+      // Default Server Upload (Potato PC or Non-PDF)
       performUpload(formData, text, loading);
     });
 
