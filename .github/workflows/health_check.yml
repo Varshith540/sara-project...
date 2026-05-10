@@ -13,23 +13,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Wait for Render Deployment
-        run: sleep 60
+      - name: Wait for Render Deployment (Deployment Buffer)
+        run: sleep 180
 
-      - name: Check Server Health
+      - name: Ping Live Server
         id: health_check
         run: |
-          for i in {1..9}; do
-            STATUS=$(curl -o /dev/null -s -w "%{http_code}" ${{ secrets.APP_URL }}/ping/)
-            if [ $STATUS -eq 200 ]; then
-              echo "Server is Healthy"
-              exit 0
-            fi
-            echo "Attempt $i: Server not ready (Status: $STATUS). Waiting..."
-            sleep 20
-          done
-          echo "Server Failed Health Check!"
-          exit 1
+          curl -f ${{ secrets.APP_URL }}/ping/ || exit 1
 
       - name: Auto-Rollback on Failure
         if: failure()
