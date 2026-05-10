@@ -719,3 +719,26 @@ def ping_alive(request):
     Does not touch the DB or AI models.
     """
     return JsonResponse({"status": "alive"})
+
+# ---------------------------------------------------------------------------
+# Continuous Profiling: Edge Computing Telemetry (Level 7)
+# ---------------------------------------------------------------------------
+@csrf_exempt
+@require_POST
+def edge_telemetry(request):
+    """
+    Receives Edge Computing performance metrics from the client (Fire-and-Forget).
+    Logs to terminal to avoid DB overhead.
+    """
+    try:
+        data = json.loads(request.body)
+        duration = data.get('duration', '0')
+        cores = data.get('cores', 'Unknown')
+        ram = data.get('ram', 'Unknown')
+        status = data.get('status', 'success')
+        
+        print(f"[TELEMETRY] Device: {cores} Cores, {ram}GB RAM | Task: PDF_Edge_Process | Time: {duration}ms | Status: {status}")
+    except Exception:
+        pass # Silent failure to protect main thread
+        
+    return JsonResponse({'status': 'logged'})
