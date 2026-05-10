@@ -42,7 +42,17 @@ def upload_resume(request):
             return render(request, 'core/upload.html')
 
         form = ResumeUploadForm(request.POST, request.FILES)
-        if form.is_valid():
+        
+        # ── 10x Verification Core Protocol: Dual-Sided Validation ─────────────
+        edge_images = request.POST.getlist('edge_processed_images[]')
+        is_valid = form.is_valid()
+        
+        if is_valid:
+            if not request.FILES.get('resume_file') and not edge_images:
+                form.add_error('resume_file', 'Please upload a resume or allow secure Edge processing.')
+                is_valid = False
+                
+        if is_valid:
             if is_ajax:
                 from django.http import StreamingHttpResponse
                 return StreamingHttpResponse(
