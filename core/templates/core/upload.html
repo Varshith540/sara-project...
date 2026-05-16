@@ -178,6 +178,9 @@
             </div>
 
           </form>
+
+          <!-- Django error-state flag — read by JS below; avoids template tags inside <script> -->
+          <span id="rx-form-error-flag" data-has-errors="{% if form.errors %}true{% else %}false{% endif %}" hidden></span>
         </div>
 
         <!-- Trust / privacy bar -->
@@ -308,21 +311,22 @@
   }
 
   // ── On page load: restore state if returning from a failed POST ───────────
-  {% if form.errors %}
-  (function restoreAfterError() {
-    const saved = sessionStorage.getItem('rx_pending_file');
-    if (saved) {
-      try {
-        const { name, size } = JSON.parse(saved);
-        const isImg = IMAGE_TYPES.some(e => name.toLowerCase().endsWith(e));
-        showPreviewCard(name, size, true, isImg, null);
-        reSelectBanner.classList.remove('d-none');
-      } catch(e) { /* ignore */ }
-    }
-  })();
-  {% else %}
-  sessionStorage.removeItem('rx_pending_file');
-  {% endif %}
+  const _hasErrors = document.getElementById('rx-form-error-flag')?.dataset.hasErrors === 'true';
+  if (_hasErrors) {
+    (function restoreAfterError() {
+      const saved = sessionStorage.getItem('rx_pending_file');
+      if (saved) {
+        try {
+          const { name, size } = JSON.parse(saved);
+          const isImg = IMAGE_TYPES.some(e => name.toLowerCase().endsWith(e));
+          showPreviewCard(name, size, true, isImg, null);
+          reSelectBanner.classList.remove('d-none');
+        } catch(e) { /* ignore */ }
+      }
+    })();
+  } else {
+    sessionStorage.removeItem('rx_pending_file');
+  }
 
   // ── JD input listener ─────────────────────────────────────────────────────
   if (jdInput) jdInput.addEventListener('input', validateForm);

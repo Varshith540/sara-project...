@@ -19,7 +19,7 @@ jobs:
       - name: Ping Live Server
         id: health_check
         run: |
-          curl -f ${{ secrets.APP_URL }}/ping/ || exit 1
+          curl -f "${{ secrets.APP_URL }}/ping/" || exit 1
 
       - name: Auto-Rollback on Failure
         if: failure()
