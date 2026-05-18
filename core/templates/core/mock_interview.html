@@ -1,0 +1,290 @@
+{% extends "core/base.html" %}
+{% block title %}Mock Interview | ResumeXpert{% endblock %}
+
+{% block extra_head %}
+<style>
+  .glass-container {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.4);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+    border-radius: 20px;
+    padding: 2rem;
+  }
+  
+  .mic-btn {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: white;
+    border: none;
+    font-size: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(99,102,241,0.4);
+    margin: 0 auto;
+  }
+  
+  .mic-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(99,102,241,0.6);
+  }
+  
+  .mic-btn.recording {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    animation: pulse 1.5s infinite;
+    box-shadow: 0 4px 15px rgba(239,68,68,0.4);
+  }
+  
+  @keyframes pulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    70% { transform: scale(1.1); box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  }
+  
+  .transcription-box {
+    width: 100%;
+    min-height: 150px;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem;
+    font-size: 1.1rem;
+    line-height: 1.6;
+    color: #334155;
+    background: #f8fafc;
+    resize: vertical;
+    transition: border-color 0.3s;
+  }
+  
+  .transcription-box:focus {
+    outline: none;
+    border-color: #6366f1;
+    background: #fff;
+  }
+  
+  .feedback-card {
+    display: none;
+    background: linear-gradient(135deg, #f0fdfa, #ccfbf1);
+    border-left: 5px solid #0d9488;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+    animation: slideIn 0.5s forwards;
+  }
+  
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5 max-w-4xl">
+  
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold"><i class="bi bi-mic-fill text-primary me-2"></i>Interactive Mock Interview</h2>
+    <a href="{% url 'dashboard' result.pk %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to Dashboard</a>
+  </div>
+  
+  <div class="glass-container">
+    <div class="text-center mb-4">
+      <h5 class="text-muted fw-bold text-uppercase tracking-wider">Question <span id="qIndex">1</span> of {{ questions|length }}</h5>
+      <h3 id="questionText" class="fw-bold mt-2" style="color: #1e1b4b;">{{ questions.0 }}</h3>
+    </div>
+    
+    <div id="apiWarning" class="alert alert-warning d-none">
+      <i class="bi bi-exclamation-triangle-fill me-2"></i> Your browser does not support the Web Speech API. You can still type your answer below.
+    </div>
+    
+    <div class="text-center my-5">
+      <button id="micBtn" class="mic-btn" onclick="toggleRecording()">
+        <i id="micIcon" class="bi bi-mic"></i>
+      </button>
+      <p id="micStatus" class="mt-3 text-muted fw-bold">Click to start speaking</p>
+    </div>
+    
+    <div class="mb-4">
+      <label class="form-label fw-bold text-muted">Your Answer Transcription:</label>
+      <textarea id="transcriptionBox" class="transcription-box" placeholder="Speak into your microphone, or type your answer here..."></textarea>
+    </div>
+    
+    <div class="d-flex justify-content-between">
+      <button id="submitBtn" class="btn btn-lg btn-success fw-bold px-4" onclick="submitAnswer()">
+        <i class="bi bi-check-circle me-2"></i>Submit & Evaluate
+      </button>
+      <button id="nextBtn" class="btn btn-lg btn-primary fw-bold px-4 d-none" onclick="nextQuestion()">
+        Next Question <i class="bi bi-arrow-right ms-2"></i>
+      </button>
+    </div>
+    
+    <!-- Feedback Section -->
+    <div id="feedbackSection" class="feedback-card">
+      <div class="d-flex align-items-center mb-2">
+        <h4 class="fw-bold mb-0 text-teal-800"><i class="bi bi-robot me-2"></i>AI Feedback</h4>
+        <span id="scoreBadge" class="badge bg-teal-600 fs-6 ms-auto px-3 py-2" style="background:#0d9488;">Score: 8/10</span>
+      </div>
+      <p id="feedbackText" class="mb-0 fs-5 text-teal-900"></p>
+    </div>
+    
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Setup questions array from Django context
+  const questions = {{ questions|safe }};
+  let currentQIndex = 0;
+  
+  // Speech Recognition Setup
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition;
+  let isRecording = false;
+  
+  if (SpeechRecognition) {
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    
+    recognition.onresult = (event) => {
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        }
+      }
+      if (finalTranscript) {
+          const box = document.getElementById('transcriptionBox');
+          box.value += (box.value ? ' ' : '') + finalTranscript;
+      }
+    };
+    
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error", event.error);
+      stopRecording();
+      document.getElementById('micStatus').innerText = "Error: " + event.error;
+    };
+  } else {
+    document.getElementById('apiWarning').classList.remove('d-none');
+    document.getElementById('micBtn').classList.add('d-none');
+    document.getElementById('micStatus').classList.add('d-none');
+  }
+  
+  function toggleRecording() {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }
+  
+  function startRecording() {
+    if (!recognition) return;
+    recognition.start();
+    isRecording = true;
+    document.getElementById('micBtn').classList.add('recording');
+    document.getElementById('micIcon').classList.replace('bi-mic', 'bi-stop-fill');
+    document.getElementById('micStatus').innerText = "Listening... (Click to stop)";
+  }
+  
+  function stopRecording() {
+    if (!recognition) return;
+    recognition.stop();
+    isRecording = false;
+    document.getElementById('micBtn').classList.remove('recording');
+    document.getElementById('micIcon').classList.replace('bi-stop-fill', 'bi-mic');
+    document.getElementById('micStatus').innerText = "Click to start speaking";
+  }
+  
+  function getCSRFToken() {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, 10) === ('csrftoken=')) {
+                cookieValue = decodeURIComponent(cookie.substring(10));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+  }
+  
+  function submitAnswer() {
+    if (isRecording) stopRecording();
+    
+    const answer = document.getElementById('transcriptionBox').value.trim();
+    const question = questions[currentQIndex];
+    
+    if (!answer) {
+      alert("Please provide an answer before submitting.");
+      return;
+    }
+    
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Evaluating...';
+    
+    fetch("{% url 'api_evaluate_answer' %}", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCSRFToken()
+      },
+      body: JSON.stringify({ question: question, answer: answer })
+    })
+    .then(response => response.json())
+    .then(data => {
+      // Display Feedback
+      document.getElementById('scoreBadge').innerText = `Score: ${data.score}/10`;
+      
+      let badgeColor = "#dc2626"; // red
+      if (data.score >= 8) badgeColor = "#16a34a"; // green
+      else if (data.score >= 5) badgeColor = "#d97706"; // orange
+      document.getElementById('scoreBadge').style.backgroundColor = badgeColor;
+      
+      document.getElementById('feedbackText').innerText = data.feedback;
+      document.getElementById('feedbackSection').style.display = 'block';
+      
+      // Update buttons
+      submitBtn.classList.add('d-none');
+      document.getElementById('nextBtn').classList.remove('d-none');
+      
+      if (currentQIndex === questions.length - 1) {
+        document.getElementById('nextBtn').innerHTML = 'Finish Interview <i class="bi bi-check2-all ms-2"></i>';
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      alert("Failed to evaluate answer. Please try again.");
+    })
+    .finally(() => {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Submit & Evaluate';
+    });
+  }
+  
+  function nextQuestion() {
+    currentQIndex++;
+    if (currentQIndex >= questions.length) {
+      window.location.href = "{% url 'dashboard' result.pk %}";
+      return;
+    }
+    
+    // Reset UI
+    document.getElementById('qIndex').innerText = currentQIndex + 1;
+    document.getElementById('questionText').innerText = questions[currentQIndex];
+    document.getElementById('transcriptionBox').value = '';
+    document.getElementById('feedbackSection').style.display = 'none';
+    
+    document.getElementById('submitBtn').classList.remove('d-none');
+    document.getElementById('nextBtn').classList.add('d-none');
+  }
+</script>
+{% endblock %}

@@ -69,11 +69,11 @@
                 <option value="Mechanical Technician">
                 <option value="Electronics Engineer">
                 <option value="HVAC Technician">
-                <option value="Welding & Fabrication">
+                <option value="Welding &amp; Fabrication">
                 <!-- Corporate / Non-IT -->
                 <option value="Sales Executive">
                 <option value="Marketing Manager">
-                <option value="Banking & Finance">
+                <option value="Banking &amp; Finance">
                 <option value="HR Administrator">
                 <option value="Office Admin">
                 <option value="Customer Support">
@@ -179,8 +179,25 @@
 
           </form>
 
-          <!-- Django error-state flag — read by JS below; avoids template tags inside <script> -->
+          <!-- Hidden fields written by upload_controller.js / Web Worker -->
+          <input type="hidden" id="client_extracted_text" name="client_extracted_text">
+          <input type="hidden" id="client_file_type"      name="client_file_type">
+
+          <!-- Django error-state flag — read by JS; avoids template tags inside <script> -->
           <span id="rx-form-error-flag" data-has-errors="{% if form.errors %}true{% else %}false{% endif %}" hidden></span>
+
+        </div>
+
+        <!-- Worker pre-processing progress bar (shown during background compression/extraction) -->
+        <div id="workerProgressWrap" class="d-none mt-3">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="spinner-border spinner-border-sm text-primary" style="width:.9rem;height:.9rem;"></span>
+            <small id="workerProgressMsg" class="text-muted fw-500">Preparing file...</small>
+          </div>
+          <div class="progress" style="height:6px;border-radius:4px;">
+            <div id="workerProgressBar" class="progress-bar bg-primary progress-bar-striped progress-bar-animated"
+                 style="width:0%;transition:width .4s ease;"></div>
+          </div>
         </div>
 
         <!-- Trust / privacy bar -->
@@ -218,248 +235,11 @@
   </div>
 </section>
 
+{% load static %}
 <script>
-(function () {
-  'use strict';
-
-  // ── Element refs ──────────────────────────────────────────────────────────
-  const fileInput       = document.getElementById('resumeFile');
-  const jdInput         = document.getElementById('id_job_description');
-  const submitBtn       = document.getElementById('submitBtn');
-  const dropzone        = document.getElementById('dropzone');
-  const filePreviewCard = document.getElementById('filePreviewCard');
-  const removeFileBtn   = document.getElementById('removeFileBtn');
-  const fileError       = document.getElementById('fileError');
-  const reSelectBanner  = document.getElementById('reSelectBanner');
-  const previewBadge    = document.getElementById('previewBadge');
-  const previewIconBox  = document.getElementById('previewIconBox');
-  const previewThumb    = document.getElementById('previewThumb');
-  const previewFileIcon = document.getElementById('previewFileIcon');
-
-  // ── Allowed extensions ───────────────────────────────────────────────────
-  const ALLOWED = ['.pdf', '.docx', '.jpg', '.jpeg', '.png'];
-  const IMAGE_TYPES = ['.jpg', '.jpeg', '.png'];
-
-  // ── Double-click guard ────────────────────────────────────────────────────
-  let _pickerOpen = false;
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  function formatBytes(bytes, decimals = 1) {
-    if (!+bytes) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
-  }
-
-  function getFileExt(name) {
-    const idx = name.lastIndexOf('.');
-    return idx >= 0 ? name.slice(idx).toLowerCase() : '';
-  }
-
-  function showPreviewCard(name, sizeText, reSelect, isImage, thumbUrl) {
-    document.getElementById('previewFileName').textContent = name;
-    document.getElementById('previewFileSize').textContent = sizeText;
-
-    if (isImage && thumbUrl) {
-      previewIconBox.style.display = 'none';
-      previewThumb.src = thumbUrl;
-      previewThumb.style.display = 'block';
-    } else {
-      previewThumb.style.display = 'none';
-      previewIconBox.style.display = '';
-      const ext = getFileExt(name);
-      previewFileIcon.className = ext === '.pdf'
-        ? 'bi bi-file-earmark-pdf-fill'
-        : ext === '.docx'
-          ? 'bi bi-file-earmark-word-fill'
-          : 'bi bi-image-fill';
-    }
-
-    if (reSelect) {
-      previewBadge.className = 'badge bg-warning text-dark';
-      previewBadge.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Re-select file below';
-    } else {
-      previewBadge.className = isImage ? 'badge bg-info' : 'badge bg-success';
-      previewBadge.innerHTML = isImage
-        ? '<i class="bi bi-eye me-1"></i>Vision AI will analyse'
-        : '<i class="bi bi-check-circle me-1"></i>Ready to Analyse';
-    }
-    dropzone.classList.add('d-none');
-    filePreviewCard.classList.remove('d-none');
-    filePreviewCard.classList.add('d-flex');
-  }
-
-  function resetFileUI() {
-    if (fileInput) fileInput.value = '';
-    filePreviewCard.classList.add('d-none');
-    filePreviewCard.classList.remove('d-flex');
-    dropzone.classList.remove('d-none');
-    hideErrorToast();
-    reSelectBanner.classList.add('d-none');
-    previewThumb.style.display = 'none';
-    previewThumb.src = '';
-    previewIconBox.style.display = '';
-    sessionStorage.removeItem('rx_pending_file');
-    validateForm();
-  }
-
-  function validateForm() {
-    const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
-    const hasJD   = jdInput && jdInput.value.trim().length >= 30;
-    submitBtn.disabled = !(hasFile && hasJD);
-  }
-
-  // ── On page load: restore state if returning from a failed POST ───────────
-  const _hasErrors = document.getElementById('rx-form-error-flag')?.dataset.hasErrors === 'true';
-  if (_hasErrors) {
-    (function restoreAfterError() {
-      const saved = sessionStorage.getItem('rx_pending_file');
-      if (saved) {
-        try {
-          const { name, size } = JSON.parse(saved);
-          const isImg = IMAGE_TYPES.some(e => name.toLowerCase().endsWith(e));
-          showPreviewCard(name, size, true, isImg, null);
-          reSelectBanner.classList.remove('d-none');
-        } catch(e) { /* ignore */ }
-      }
-    })();
-  } else {
-    sessionStorage.removeItem('rx_pending_file');
-  }
-
-  // ── JD input listener ─────────────────────────────────────────────────────
-  if (jdInput) jdInput.addEventListener('input', validateForm);
-
-  // ── Dropzone click — with double-click guard ──────────────────────────────
-  if (dropzone && fileInput) {
-    dropzone.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      if (_pickerOpen) return;
-      _pickerOpen = true;
-      fileInput.click();
-      setTimeout(() => { _pickerOpen = false; }, 1200);
-    });
-
-    dropzone.addEventListener('dragover', function (e) {
-      e.preventDefault();
-      dropzone.classList.add('rx-dropzone-active');
-    });
-    dropzone.addEventListener('dragleave', function () {
-      dropzone.classList.remove('rx-dropzone-active');
-    });
-    dropzone.addEventListener('drop', function (e) {
-      e.preventDefault();
-      dropzone.classList.remove('rx-dropzone-active');
-      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        const dt = new DataTransfer();
-        dt.items.add(e.dataTransfer.files[0]);
-        fileInput.files = dt.files;
-        fileInput.dispatchEvent(new Event('change'));
-      }
-    });
-  }
-
-  // ── File input change ─────────────────────────────────────────────────────
-  function showErrorToast(msg) {
-    const box = document.getElementById('fileError');
-    document.getElementById('fileErrorText').textContent = msg;
-    box.classList.remove('d-none');
-    box.classList.add('rx-error-toast-in');
-  }
-  function hideErrorToast() {
-    document.getElementById('fileError').classList.add('d-none');
-    document.getElementById('fileError').classList.remove('rx-error-toast-in');
-  }
-
-  if (fileInput) {
-    fileInput.addEventListener('change', function (e) {
-      e.stopPropagation();    // never bubble the change event
-      _pickerOpen = false;
-      hideErrorToast();
-      reSelectBanner.classList.add('d-none');
-
-      if (this.files && this.files[0]) {
-        const file    = this.files[0];
-        const ext     = getFileExt(file.name);
-        const isImage = IMAGE_TYPES.includes(ext);
-
-        if (!ALLOWED.includes(ext)) {
-          showErrorToast('Invalid format. Supported: PDF, DOCX, JPG, PNG.');
-          resetFileUI();
-          return;
-        }
-        if (file.size > 50 * 1024 * 1024) {
-          showErrorToast('File too large — max 50 MB.');
-          resetFileUI();
-          return;
-        }
-
-        const sizeText = formatBytes(file.size);
-        sessionStorage.setItem('rx_pending_file', JSON.stringify({ name: file.name, size: sizeText }));
-
-        if (isImage) {
-          // Generate object URL for thumbnail preview
-          const thumbUrl = URL.createObjectURL(file);
-          showPreviewCard(file.name, sizeText, false, true, thumbUrl);
-        } else {
-          showPreviewCard(file.name, sizeText, false, false, null);
-        }
-        validateForm();
-      }
-    });
-  }
-
-  // ── Remove file button ────────────────────────────────────────────────────
-  if (removeFileBtn) removeFileBtn.addEventListener('click', resetFileUI);
-
-  // ── Form submit ───────────────────────────────────────────────────────────
-  const uploadForm = document.getElementById('uploadForm');
-  if (uploadForm) {
-    uploadForm.addEventListener('submit', function (e) {
-      if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-        e.preventDefault();
-        showErrorToast('Please select a resume file before submitting.');
-        dropzone.classList.remove('d-none');
-        filePreviewCard.classList.add('d-none');
-        return;
-      }
-
-      // ── Multi-phase progress spinner ───────────────────────────────────────
-      const ext          = getFileExt(fileInput.files[0].name);
-      const needsConvert = IMAGE_TYPES.includes(ext) || ext === '.pdf';
-
-      const btnText      = submitBtn.querySelector('.btn-text');
-      const phaseUpload  = document.getElementById('phaseUpload');
-      const phaseConvert = document.getElementById('phaseConvert');
-      const phaseAnalyse = document.getElementById('phaseAnalyse');
-
-      function showPhase(el) {
-        [btnText, phaseUpload, phaseConvert, phaseAnalyse].forEach(p => {
-          if (p) p.classList.add('d-none');
-        });
-        if (el) el.classList.remove('d-none');
-      }
-
-      showPhase(phaseUpload);
-      submitBtn.disabled = true;
-
-      if (needsConvert) {
-        // Phase 2 after 800 ms (form submitted, server receives file, starting conversion)
-        setTimeout(() => showPhase(phaseConvert), 800);
-        // Phase 3 after 4 s (conversion done, AI call starting)
-        setTimeout(() => showPhase(phaseAnalyse), 4000);
-      } else {
-        // DOCX / text PDF: skip conversion phase
-        setTimeout(() => showPhase(phaseAnalyse), 800);
-      }
-
-      sessionStorage.removeItem('rx_pending_file');
-    });
-  }
-
-})();
+  window.RESUME_WORKER_URL = "{% static 'js/resume_worker.js' %}";
+  window.PDF_WORKER_URL    = 'https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs';
 </script>
+<script src="{% static 'js/upload_controller.js' %}" defer></script>
 
 {% endblock %}

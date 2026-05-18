@@ -46,6 +46,19 @@ class ResumeUploadForm(forms.Form):
         })
     )
 
+    # ── Client-side offloading fields (written by upload_controller.js) ──────
+    # Optional — not shown in the UI. The Web Worker fills these before submit.
+    # The server uses them to skip expensive PyMuPDF / pdfplumber passes.
+    client_extracted_text = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+    )
+    client_file_type = forms.CharField(
+        required=False,
+        max_length=30,
+        widget=forms.HiddenInput(),
+    )
+
     ALLOWED_EXTENSIONS = ('.pdf', '.docx', '.jpg', '.jpeg', '.png')
 
     def clean_resume_file(self):

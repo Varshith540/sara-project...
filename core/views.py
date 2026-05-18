@@ -22,6 +22,7 @@ from .gemini_service import (
     is_gemini_available,
     rewrite_resume_with_gemini,
 )
+import core.middleware
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +58,13 @@ def upload_resume(request):
         print(f"request.FILES present: {'resume_file' in request.FILES}")
         print(f"DEBUG: Form Errors -> {form.errors.as_data()}")
         print("================================")
+        
+        # Intercept Form Validation Error for Sri AI Live Diagnosing
+        core.middleware._LATEST_DIAGNOSTIC = {
+            "type": "validation_error",
+            "message": f"I intercepted a Ghost Upload / Form Validation Error!\n\n**Missing Fields/Errors:** {form.errors.as_json()}\n\nMake sure the HTML form has `enctype=\"multipart/form-data\"` and the input name is correct."
+        }
+
         
         # Give explicit frontend feedback to the user
         error_msgs = []
@@ -312,21 +320,37 @@ def generate_resume(request, pk):
 # Company Analysis view
 # ---------------------------------------------------------------------------
 def company_analysis(request, pk):
-    """View to search and display company analysis using Gemini."""
+    """View to search and display company analysis using Gemini.
+
+    GET  → renders the page shell (always HTML).
+    POST → runs the AI analysis. Returns JsonResponse for AJAX callers;
+           falls back to a redirect for non-AJAX (progressive enhancement).
+    """
     result = get_object_or_404(AnalysisResult, pk=pk)
 
     if request.method == 'POST':
         company_name = request.POST.get('company_name', '').strip()
+        is_ajax = (
+            request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or 'application/json' in request.headers.get('Accept', '')
+        )
         if company_name:
             from .gemini_service import analyze_company_with_gemini
             analysis = analyze_company_with_gemini(company_name, result.job_description)
             if analysis:
-                result.company_name = company_name
+                result.company_name     = company_name
                 result.company_analysis = analysis
                 result.save(update_fields=['company_name', 'company_analysis'])
+                if is_ajax:
+                    return JsonResponse({'status': 'ok', 'company_name': company_name, 'analysis': analysis})
                 messages.success(request, f"Analysis for {company_name} completed!")
             else:
+                if is_ajax:
+                    return JsonResponse({'status': 'error', 'message': 'AI could not analyse this company.'}, status=502)
                 messages.error(request, "Failed to analyze the company right now.")
+        else:
+            if is_ajax:
+                return JsonResponse({'status': 'error', 'message': 'Company name is required.'}, status=400)
         return redirect('company_analysis', pk=pk)
 
     context = {
@@ -482,9 +506,16 @@ def _process_upload_stream(request, form):
         job_description = form.cleaned_data['job_description']
         manual_name     = form.cleaned_data.get('full_name', '').strip()
         force_compress  = request.POST.get('force_compress') == 'true'
-        
+
+        # ── Client-side pre-processing bypass ───────────────────────────────
+        # If the browser's Web Worker already extracted PDF text or compressed
+        # an image, the controller posts these fields so the server skips the
+        # expensive PyMuPDF / Pillow / pdfplumber passes entirely.
+        client_text      = request.POST.get('client_extracted_text', '').strip()
+        client_file_type = request.POST.get('client_file_type', '')   # 'pdf_text' | 'compressed_image' | 'image_pdf' | ''
+
         edge_images = request.POST.getlist('edge_processed_images[]')
-        
+
         if edge_images:
             uploaded_file = None
             is_image = True
@@ -496,8 +527,9 @@ def _process_upload_stream(request, form):
                 yield send_error("⚠️ No file or edge data provided.")
                 return
             file_ext        = os.path.splitext(uploaded_file.name)[1].lower()
-            is_image        = file_ext in ('.jpg', '.jpeg', '.png')
+            is_image        = file_ext in ('.jpg', '.jpeg', '.png') or client_file_type == 'compressed_image'
             file_size       = uploaded_file.size
+
 
         yield send_status('validation', "File Received. Starting Validation...")
 
@@ -505,29 +537,55 @@ def _process_upload_stream(request, form):
             yield send_error("⚠️ File size too large. This is a beta version with a 30MB capacity limit.")
             return
 
-        # ── 2-Pass Smart Gatekeeper (> 5MB) ──────────────────────────────────
-        if file_size > 5 * 1024 * 1024 and not force_compress:
-            mb_size = f"{file_size / (1024 * 1024):.1f}"
-            yield json.dumps({
-                "step": "large_file_detected",
-                "msg": f"File is heavy ({mb_size} MB). Move to compression?",
-                "size": mb_size
-            }) + '\n'
-            return
-
-        # ── Dynamic ETA Logic ────────────────────────────────────────────────
+        # ── Dynamic ETA Logic (client-aware) ────────────────────────────────
+        # If the browser pre-extracted text, we skip server OCR → shorter ETA.
         eta_seconds = 25
-        if is_image or file_ext == '.pdf':
+        if client_text:
+            eta_seconds = 10
+        elif is_image or file_ext == '.pdf':
             if file_size > 10 * 1024 * 1024:
                 eta_seconds = 150
             elif is_image or (file_size > 2 * 1024 * 1024):
                 eta_seconds = 75
         yield json.dumps({"step": "eta", "seconds": eta_seconds}) + '\n'
 
+
+
         if uploaded_file:
-            resume = Resume(file=uploaded_file)
-            resume.save()
+            yield send_status('compression', "Applying zlib in-memory chunk streaming...")
+            import zlib
+            import io
+            import tempfile
+            from django.core.files import File
+            
+            # Compress dynamically in memory
+            compressed_buffer = io.BytesIO()
+            compressor = zlib.compressobj(level=zlib.Z_BEST_COMPRESSION)
+            
+            for chunk in uploaded_file.chunks(chunk_size=65536):
+                compressed_buffer.write(compressor.compress(chunk))
+            compressed_buffer.write(compressor.flush())
+            
+            # Decompress into a temporary file to keep RAM usage minimal
+            compressed_buffer.seek(0)
+            decompressor = zlib.decompressobj()
+            
+            resume = Resume()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
+                while True:
+                    c_chunk = compressed_buffer.read(65536)
+                    if not c_chunk:
+                        break
+                    tmp.write(decompressor.decompress(c_chunk))
+                tmp.write(decompressor.flush())
+                tmp_path = tmp.name
+                
+            with open(tmp_path, 'rb') as f:
+                resume.file.save(uploaded_file.name, File(f), save=True)
+                
+            os.remove(tmp_path)
             file_path = resume.file.path
+
         else:
             import base64
             from django.core.files.base import ContentFile
@@ -566,8 +624,29 @@ def _process_upload_stream(request, form):
                 print(f"[Compression] Compression failed, proceeding with original. Error: {e}")
             gc.collect()
 
-        # ── Extraction & AI Analysis ─────────────────────────────────────────
-        if is_image:
+        # ── Extraction & AI Analysis ──────────────────────────────────────────
+        if client_text and client_file_type == 'pdf_text':
+            # Fast path: browser already extracted text — skip server OCR entirely
+            yield send_status('ocr', "Using pre-extracted text from browser...")
+            raw_text = client_text
+            try:
+                gemini_data = {}
+                for update in analyze_resume_with_gemini(raw_text, job_description):
+                    if isinstance(update, dict) and 'step' in update:
+                        yield send_status(update['step'], update['msg'])
+                    elif isinstance(update, dict):
+                        gemini_data = update
+                gc.collect()
+            except Exception as e:
+                resume.delete()
+                msg = str(e)
+                if '429' in msg:
+                    yield json.dumps({'step': 'MEM_LIMIT_REACHED', 'msg': 'Rate limit exceeded'}) + '\n'
+                    return
+                yield send_error(f"Analysis failed: {msg[:100]}")
+                return
+
+        elif is_image:
             try:
                 vision_data = {}
                 for update in analyze_resume_image_with_gemini(file_path, job_description, edge_images=edge_images):
@@ -632,6 +711,10 @@ def _process_upload_stream(request, form):
         resume.phone           = extract_phone(raw_text)
         resume.target_industry = form.cleaned_data.get('target_industry', '').strip()
         resume.save()
+        
+        from .resume_parser import extract_structured_data
+        yield send_status('structuring', "Building structured JSON data...")
+        structured_data = extract_structured_data(raw_text)
 
         score_data = calculate_score(raw_text, job_description)
 
@@ -650,6 +733,7 @@ def _process_upload_stream(request, form):
             interview_questions = gemini_data.get('interview_questions', []),
             job_fit_score     = gemini_data.get('job_fit_score', 0),
             active_ai_model   = gemini_data.get('active_model', 'Gemini'),
+            structured_data   = structured_data,
         )
         result.save()
 
@@ -711,6 +795,63 @@ def compare_resumes(request):
     return StreamingHttpResponse(_compare_stream(), content_type='application/x-ndjson')
 
 # ---------------------------------------------------------------------------
+# Deep Health Check Endpoint (used by Phoenix Protocol CI/CD)
+# ---------------------------------------------------------------------------
+def deep_health_check(request):
+    """
+    Comprehensive health probe for CI/CD and load-balancer checks.
+    Returns HTTP 200 only when DB connectivity and critical env vars are OK.
+    Returns HTTP 503 with a JSON body describing which checks failed.
+    """
+    import time
+    from django.db import connection, OperationalError
+
+    checks = {}
+    overall_ok = True
+
+    # 1. Database connectivity
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        checks["database"] = "ok"
+    except OperationalError as e:
+        checks["database"] = f"FAIL: {e}"
+        overall_ok = False
+
+    # 2. Safe Mode sentinel (memory pressure flag from wsgi.py monitor)
+    safe_mode_active = os.path.exists('/tmp/SAFE_MODE.lock')
+    checks["safe_mode"] = "engaged" if safe_mode_active else "ok"
+    # Safe mode is informational only — does not fail the health check
+
+    # 3. Critical environment variables
+    for key in ["GEMINI_API_KEY", "SECRET_KEY"]:
+        present = bool(os.environ.get(key, '').strip())
+        checks[f"env_{key.lower()}"] = "set" if present else "MISSING"
+        if not present:
+            overall_ok = False
+
+    http_status = 200 if overall_ok else 503
+    return JsonResponse(
+        {
+            "status": "healthy" if overall_ok else "unhealthy",
+            "checks": checks,
+            "timestamp": time.time(),
+        },
+        status=http_status,
+    )
+
+# ---------------------------------------------------------------------------
+# API: Chat Diagnostics for Sri AI Chat UI
+# ---------------------------------------------------------------------------
+def chat_diagnostics(request):
+    """Returns the latest backend error / diagnostic for Sri AI UI."""
+    diagnostic = core.middleware.get_latest_diagnostic()
+    if diagnostic:
+        core.middleware.clear_diagnostic()
+        return JsonResponse({"has_error": True, "diagnostic": diagnostic})
+    return JsonResponse({"has_error": False})
+
+# ---------------------------------------------------------------------------
 # Heartbeat Endpoint (System Reliability Guardian)
 # ---------------------------------------------------------------------------
 def ping_alive(request):
@@ -719,3 +860,124 @@ def ping_alive(request):
     Does not touch the DB or AI models.
     """
     return JsonResponse({"status": "alive"})
+
+# ---------------------------------------------------------------------------
+# Sri AI CI/CD One-Click Webhook
+# ---------------------------------------------------------------------------
+def sri_approve_deployment(request, token):
+    """
+    Webhook endpoint to trigger the One-Click Deployment pipeline.
+    Expects a PR number parameter in the query string, e.g., ?pr=4
+    """
+    pr_number = request.GET.get('pr')
+    if not pr_number:
+        return JsonResponse({"error": "Missing PR number parameter"}, status=400)
+        
+    from .models import PendingDeployment
+    try:
+        deployment = PendingDeployment.objects.get(pr_number=pr_number, status='pending')
+    except PendingDeployment.DoesNotExist:
+        return HttpResponse("<h1>Deployment is no longer pending or does not exist.</h1>", status=400)
+        
+    from .sri_cicd import execute_cicd_pipeline
+    result = execute_cicd_pipeline(pr_number, reason_log=deployment.analysis_log)
+    
+    if result.get("status") == "success":
+        deployment.status = 'approved'
+        deployment.save()
+        html = f"""
+        <html><body style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+            <h1 style="color: green;">✅ Deployment Approved & Successful!</h1>
+            <p>{result.get('message')}</p>
+        </body></html>
+        """
+    else:
+        html = f"""
+        <html><body style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+            <h1 style="color: red;">❌ Deployment Failed. Rolled Back Safely.</h1>
+            <p>{result.get('message')}</p>
+        </body></html>
+        """
+        
+    from django.http import HttpResponse
+    return HttpResponse(html)
+
+def sri_reject_deployment(request, token):
+    """
+    Webhook endpoint to reject a pending autonomous deployment.
+    """
+    pr_number = request.GET.get('pr')
+    if not pr_number:
+        return JsonResponse({"error": "Missing PR number parameter"}, status=400)
+        
+    from .models import PendingDeployment
+    try:
+        deployment = PendingDeployment.objects.get(pr_number=pr_number, status='pending')
+    except PendingDeployment.DoesNotExist:
+        from django.http import HttpResponse
+        return HttpResponse("<h1>Deployment is no longer pending or does not exist.</h1>", status=400)
+        
+    from .sri_cicd import execute_reject_pipeline
+    result = execute_reject_pipeline(pr_number)
+    
+    if result.get("status") == "success":
+        deployment.status = 'rejected'
+        deployment.save()
+        html = f"""
+        <html><body style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+            <h1 style="color: #d9534f;">🛑 Deployment Rejected & Discarded</h1>
+            <p>The isolated update branch has been safely deleted. The AI will not proceed.</p>
+        </body></html>
+        """
+    else:
+        html = f"""
+        <html><body style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+            <h1 style="color: red;">❌ Error Rejecting Deployment</h1>
+            <p>{result.get('message')}</p>
+        </body></html>
+        """
+        
+    from django.http import HttpResponse
+    return HttpResponse(html)
+
+# ---------------------------------------------------------------------------
+# Interactive Mock Interview
+# ---------------------------------------------------------------------------
+def mock_interview(request, pk):
+    """
+    Renders the Mock Interview UI and passes the generated interview questions.
+    """
+    result = get_object_or_404(AnalysisResult, pk=pk)
+    questions = result.interview_questions
+    
+    if not questions:
+        messages.warning(request, "No interview questions found. Please ensure Gemini API is configured and re-analyze your resume.")
+        return redirect('dashboard', pk=pk)
+        
+    context = {
+        'result': result,
+        'questions': questions
+    }
+    return render(request, 'core/mock_interview.html', context)
+
+@require_POST
+def api_evaluate_answer(request):
+    """
+    AJAX endpoint to evaluate a spoken answer against a question.
+    """
+    try:
+        import json
+        data = json.loads(request.body)
+        question = data.get('question', '')
+        answer = data.get('answer', '')
+        
+        if not question or not answer:
+            return JsonResponse({"error": "Missing question or answer data"}, status=400)
+            
+        from .interview_evaluator import evaluate_interview_answer
+        result = evaluate_interview_answer(question, answer)
+        
+        return JsonResponse(result)
+        
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)

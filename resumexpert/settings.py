@@ -17,9 +17,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ---------------------------------------------------------------------------
 # Security
 # ---------------------------------------------------------------------------
-SECRET_KEY = 'django-insecure-resumexpert-secret-key-change-in-production-2024'
-DEBUG = True
-ALLOWED_HOSTS = ['*']
+SECRET_KEY = os.getenv(
+    'SECRET_KEY',
+    'django-insecure-resumexpert-secret-key-change-in-production-2024'
+)
+DEBUG = os.getenv('DEBUG', 'True') == 'True'
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
 # ---------------------------------------------------------------------------
 # Installed apps
@@ -46,6 +49,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.SriAIHealerMiddleware',
 ]
 
 ROOT_URLCONF = 'resumexpert.urls'
@@ -72,14 +76,67 @@ TEMPLATES = [
 WSGI_APPLICATION = 'resumexpert.wsgi.application'
 
 # ---------------------------------------------------------------------------
-# Database
+# Database — Dual-DB Architecture
 # ---------------------------------------------------------------------------
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# PRIMARY (Server DB): PostgreSQL on Render / Supabase / Neon.
+#   Set DATABASE_URL in your environment / GitHub Environment secret.
+#   Falls back to local SQLite for development convenience.
+#
+# BACKUP (Storage DB): A second PostgreSQL instance used exclusively by
+#   the BackupDatabaseRouter for audit logs and cold-storage snapshots.
+#   Set BACKUP_DATABASE_URL in environment. Falls back to a local file.
+# ---------------------------------------------------------------------------
+
+_DEFAULT_DB_URL = os.getenv('DATABASE_URL', '')
+_BACKUP_DB_URL  = os.getenv('BACKUP_DATABASE_URL', '')
+
+def _parse_pg_url(url: str) -> dict:
+    """Parse a postgres://user:pass@host:port/dbname URL into Django DATABASES dict."""
+    import re
+    m = re.match(
+        r'postgres(?:ql)?://(?P<user>[^:]+):(?P<password>[^@]+)@'
+        r'(?P<host>[^:/]+)(?::(?P<port>\d+))?/(?P<name>.+)',
+        url
+    )
+    if not m:
+        return {}
+    return {
+        'ENGINE':   'django.db.backends.postgresql',
+        'NAME':     m.group('name'),
+        'USER':     m.group('user'),
+        'PASSWORD': m.group('password'),
+        'HOST':     m.group('host'),
+        'PORT':     m.group('port') or '5432',
+        'CONN_MAX_AGE': 60,          # persistent connections
+        'OPTIONS': {
+            'sslmode': 'require',    # enforce TLS for Render / Supabase / Neon
+        },
     }
+
+DATABASES = {
+    # ── Primary / Server DB ──────────────────────────────────────────────
+    'default': (
+        _parse_pg_url(_DEFAULT_DB_URL)
+        if _DEFAULT_DB_URL else
+        {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',  # local dev fallback only
+        }
+    ),
+
+    # ── Backup / Storage DB ──────────────────────────────────────────────
+    'backup': (
+        _parse_pg_url(_BACKUP_DB_URL)
+        if _BACKUP_DB_URL else
+        {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db_backup.sqlite3',  # local dev fallback only
+        }
+    ),
 }
+
+# Route backup-specific models to the 'backup' DB; everything else → 'default'
+DATABASE_ROUTERS = ['resumexpert.db_router.BackupDatabaseRouter']
 
 # ---------------------------------------------------------------------------
 # Password validation

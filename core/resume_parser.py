@@ -331,3 +331,95 @@ def extract_sections(text: str) -> dict:
 
     sections[current_section] = '\n'.join(current_lines).strip()
     return sections
+
+# ---------------------------------------------------------------------------
+# Structured JSON Extraction
+# ---------------------------------------------------------------------------
+def _clean_json_response(raw_text: str) -> str:
+    """
+    Sanitizes LLM output to extract just the JSON string, removing any
+    hallucinated markdown tags or trailing text.
+    """
+    cleaned = raw_text.strip()
+    
+    # Remove ```json and ``` markdown tags
+    if cleaned.startswith("```json"):
+        cleaned = cleaned[7:]
+    elif cleaned.startswith("```"):
+        cleaned = cleaned[3:]
+        
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+        
+    # Find the first { and last } to strip conversational hallucinations
+    start_idx = cleaned.find('{')
+    end_idx = cleaned.rfind('}')
+    
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        cleaned = cleaned[start_idx:end_idx + 1]
+        
+    return cleaned.strip()
+
+def extract_structured_data(raw_text: str) -> dict:
+    """
+    Uses the Gemini API to parse chaotic raw text into a strict, deeply nested JSON schema.
+    Includes robust error handling and fallback defaults if parsing fails.
+    """
+    import json
+    from django.conf import settings
+    from google import genai
+    
+    default_schema = {
+        "personal_info": {"name": "", "email": "", "phone": "", "links": []},
+        "education": [],
+        "skills": {"technical": [], "soft": []},
+        "experience": [],
+        "projects": []
+    }
+    
+    if not raw_text.strip():
+        return default_schema
+        
+    api_key = getattr(settings, 'GEMINI_API_KEY', '').strip()
+    if not api_key or api_key == 'your_gemini_api_key_here':
+        print("[StructuredParser] Gemini API key missing, returning default schema.")
+        return default_schema
+
+    try:
+        client = genai.Client(api_key=api_key)
+        
+        prompt = f"""
+        You are an expert Technical HR Parser. Extract the following information from this resume raw text.
+        You MUST return ONLY a valid JSON object following this EXACT schema. Do not add any markdown, comments, or conversational text.
+        
+        SCHEMA:
+        {{
+            "personal_info": {{"name": "string", "email": "string", "phone": "string", "links": ["string"]}},
+            "education": [{{"degree": "string", "institution": "string", "years": "string", "score": "string"}}],
+            "skills": {{"technical": ["string"], "soft": ["string"]}},
+            "experience": [{{"company": "string", "role": "string", "duration": "string", "responsibilities": ["string"]}}],
+            "projects": [{{"title": "string", "tech_stack": ["string"], "description": "string"}}]
+        }}
+        
+        RESUME TEXT:
+        {raw_text}
+        """
+        
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=[prompt]
+        )
+        
+        response_text = response.text
+        cleaned_json_str = _clean_json_response(response_text)
+        
+        structured_data = json.loads(cleaned_json_str)
+        print("[StructuredParser] Successfully extracted strict JSON data.")
+        return structured_data
+        
+    except json.JSONDecodeError as je:
+        print(f"[StructuredParser] JSON Parse Error: {je}. Raw output was: {response_text[:100]}...")
+        return default_schema
+    except Exception as e:
+        print(f"[StructuredParser] Extraction Error: {e}")
+        return default_schema
