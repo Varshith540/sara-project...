@@ -91,3 +91,8 @@ psutil==5.9.8
 Pillow>=10.4.0
 PyGithub>=2.1.1
 psycopg2-binary>=2.9.9
+
+# Omni-Heal additions
+playwright>=1.44.0
+aiohttp>=3.9.0
+

@@ -95,3 +95,10 @@ class CoreConfig(AppConfig):
                 scheduler.start_scheduler()
             except ImportError as e:
                 logging.error(f"Failed to start APScheduler: {e}")
+
+        # ── Omni-Heal: Start Soft-Heal background daemon ──
+        try:
+            from core.sri_autonomous_healer import start_soft_heal_engine
+            start_soft_heal_engine()
+        except Exception as e:
+            logging.error(f"[OmniHeal] Failed to start Soft-Heal engine: {e}")

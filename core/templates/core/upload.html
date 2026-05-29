@@ -240,6 +240,8 @@
   window.RESUME_WORKER_URL = "{% static 'js/resume_worker.js' %}";
   window.PDF_WORKER_URL    = 'https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs';
 </script>
+<!-- Sri AI Omni-Heal: Error telemetry watcher — must load before all other scripts -->
+<script src="{% static 'js/sri_telemetry.js' %}"></script>
 <script src="{% static 'js/upload_controller.js' %}" defer></script>
 
 {% endblock %}

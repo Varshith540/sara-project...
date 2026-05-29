@@ -4,6 +4,7 @@ ResumeXpert – Core App URL Patterns
 
 from django.urls import path
 from . import views
+from core.views_telemetry import FrontendTelemetryView
 
 urlpatterns = [
     path('',                          views.upload_resume,  name='upload'),
@@ -31,4 +32,7 @@ urlpatterns = [
     # Mock Interview
     path('interview/<int:pk>/', views.mock_interview, name='mock_interview'),
     path('api/interview/evaluate/', views.api_evaluate_answer, name='api_evaluate_answer'),
+
+    # ── Sri AI Omni-Heal Telemetry ─────────────────────────────
+    path('api/sri-heal/frontend/', FrontendTelemetryView.as_view(), name='sri_frontend_telemetry'),
 ]

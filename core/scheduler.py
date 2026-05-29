@@ -153,6 +153,21 @@ def start_scheduler():
     
     # Proactive Crawler: Runs every 12 hours
     scheduler.add_job(proactive_crawler_job, 'interval', hours=12, id='proactive_crawler_job', replace_existing=True)
-    
+
+    # ── Omni-Heal: Synthetic QA Bot — Runs every 12 hours ──
+    try:
+        from core.sri_synthetic_bot import run_synthetic_check
+        scheduler.add_job(
+            run_synthetic_check,
+            trigger='interval',
+            hours=12,
+            id='sri_synthetic_bot',
+            replace_existing=True,
+            max_instances=1,   # never run two bots simultaneously
+        )
+        logger.info("🤖 [OmniHeal] Synthetic QA Bot job registered (12h interval).")
+    except ImportError as e:
+        logger.warning(f"[OmniHeal] Could not register synthetic bot job: {e}")
+
     scheduler.start()
     logger.info("⏰ Sri AI Background Reminder Scheduler Started")
