@@ -113,6 +113,7 @@ def _extract_pdf(path: str) -> str:
     try:
         import fitz
         from google import genai
+        from google.genai import types
         from PIL import Image
         import io
         from django.conf import settings
@@ -134,7 +135,7 @@ def _extract_pdf(path: str) -> str:
                 img.save(buf, format="JPEG", quality=60, optimize=True)
                 img_bytes = buf.getvalue()
                 
-                img_payloads.append({'mime_type': 'image/jpeg', 'data': img_bytes})
+                img_payloads.append(types.Part.from_bytes(data=img_bytes, mime_type='image/jpeg'))
                 
                 del page
                 del pix

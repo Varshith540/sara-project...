@@ -365,11 +365,16 @@
       const fd    = new FormData(uploadForm);
       const mode  = clientFileType ? clientFileType.value : '';
 
-      if (mode === 'compressed_image' && _compressedFile) {
-        // Replace the original file with the browser-compressed version
+      // Forcefully ensure the file is in FormData (fixes ghost uploads)
+      if (file) {
         fd.delete('resume_file');
-        fd.append('resume_file', _compressedFile, file.name.replace(/\.[^.]+$/, '_compressed.jpg'));
+        if (mode === 'compressed_image' && _compressedFile) {
+          fd.append('resume_file', _compressedFile, file.name.replace(/\.[^.]+$/, '_compressed.jpg'));
+        } else {
+          fd.append('resume_file', file);
+        }
       }
+      
       // For 'pdf_text', client_extracted_text is already in the form as a hidden field.
       // For 'image_pdf' and DOCX (mode=''), original file is sent as-is.
 
