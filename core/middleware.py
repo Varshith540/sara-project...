@@ -1,9 +1,12 @@
 import traceback
+import time
 from django.utils.deprecation import MiddlewareMixin
-from resumexpert.sri_autonomous_healer import sri_heal
+from sri_autonomous_healer import sri_heal
 
 # Global cache to store the latest diagnostics for the frontend Chat UI
 _LATEST_DIAGNOSTIC = None
+_LAST_HEAL_TIME = 0
+_COOLDOWN_SECONDS = 600
 
 def get_latest_diagnostic():
     return _LATEST_DIAGNOSTIC
@@ -27,6 +30,13 @@ class SriAIHealerMiddleware(MiddlewareMixin):
                 
         # Sri AI healing process
         try:
+            global _LAST_HEAL_TIME
+            now = time.time()
+            if now - _LAST_HEAL_TIME < _COOLDOWN_SECONDS:
+                print(f"[Sri AI Middleware] Cooldown active. Skipping heal for {file_path}")
+                return None
+            _LAST_HEAL_TIME = now
+            
             # We run this in the background (or block slightly) to get a diagnostic
             # For this MVP, we capture it and format a smart message
             _LATEST_DIAGNOSTIC = {

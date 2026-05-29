@@ -40,6 +40,7 @@ murmurhash==1.0.15
 nltk==3.9.4
 numpy==2.4.4
 packaging==26.1
+apscheduler==3.10.4
 
 preshed==3.0.13
 proto-plus==1.27.2

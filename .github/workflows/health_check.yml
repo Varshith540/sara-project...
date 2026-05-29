@@ -30,7 +30,7 @@ jobs:
         with:
           fetch-depth: 0
           # Falls back to the default GITHUB_TOKEN if SRE_PAT is not configured.
-          token: ${{ secrets.SRE_PAT || github.token }}
+          token: ${{ secrets['SRE_PAT'] || github.token }}
 
       # ── 2. Adaptive deployment buffer ────────────────────────────────────────
       # Polls /ping/ every 15 s instead of blindly sleeping 180 s.
@@ -38,7 +38,7 @@ jobs:
       # the hard sleep either wastes time or misses slow starts entirely.
       - name: Adaptive Deployment Buffer
         env:
-          APP_URL: ${{ secrets.APP_URL }}
+          APP_URL: ${{ secrets['APP_URL'] }}
         run: |
           if [ -z "$APP_URL" ]; then
             echo "⚠️ APP_URL secret is not set. Skipping deployment ping buffer."
@@ -72,7 +72,7 @@ jobs:
       - name: Deep Health Check
         id: health_check
         env:
-          APP_URL: ${{ secrets.APP_URL }}
+          APP_URL: ${{ secrets['APP_URL'] }}
         run: |
           if [ -z "$APP_URL" ]; then
             echo "⚠️ APP_URL secret is not set. Skipping deep health check."

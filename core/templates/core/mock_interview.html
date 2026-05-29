@@ -136,9 +136,10 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ questions|json_script:"questions-data" }}
 <script>
   // Setup questions array from Django context
-  const questions = {{ questions|safe }};
+  const questions = JSON.parse(document.getElementById('questions-data').textContent);
   let currentQIndex = 0;
   
   // Speech Recognition Setup

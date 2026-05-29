@@ -359,7 +359,7 @@
         <div class="col-md-6">
           <div class="glass-card h-100 p-3">
             <h6 class="fw-bold text-dark">{{ proj.title }}</h6>
-            <p class="text-muted small mb-2" style="display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">{{ proj.description }}</p>
+            <p class="text-muted small mb-2" style="display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">{{ proj.description }}</p>
             <div>
               {% for tech in proj.tech_stack %}
               <span class="tech-pill">{{ tech }}</span>
