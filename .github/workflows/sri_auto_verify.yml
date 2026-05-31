@@ -1,0 +1,176 @@
+name: Sri AI — Auto Verify & Safe Merge
+
+on:
+  push:
+    branches:
+      - "auto-heal-patch-*"
+  workflow_dispatch:
+
+concurrency:
+  group: sri-verify-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sri-verify:
+    name: "🤖 Sri AI Autonomous Verification"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      DJANGO_SECRET_KEY:      ${{ secrets.DJANGO_SECRET_KEY }}
+      GEMINI_API_KEY:         ${{ secrets.GEMINI_API_KEY }}
+      SRI_TELEMETRY_SECRET:   ${{ secrets.SRI_TELEMETRY_SECRET }}
+      RENDER_EXTERNAL_URL:    "http://localhost:8000"
+      DJANGO_SETTINGS_MODULE: "anti_gravity.settings"
+      CI:                     "true"
+      DATABASE_URL:           "sqlite:///ci_test.db"
+
+    steps:
+      - name: "📥 Checkout patch branch"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: "🐍 Set up Python 3.11"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: "📦 Install dependencies"
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install aiohttp
+
+      - name: "🎭 Install Playwright browsers"
+        run: playwright install chromium --with-deps
+
+      - name: "🗄️ Prepare Django environment"
+        run: |
+          python manage.py migrate --run-syncdb --noinput
+          python manage.py collectstatic --noinput --clear
+
+      - name: "🚀 Start Django dev server"
+        run: |
+          python manage.py runserver 0.0.0.0:8000 \
+            --noreload --nothreading \
+            > /tmp/django_server.log 2>&1 &
+
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:8000/ > /dev/null 2>&1; then
+              echo "✅ Server ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+
+          curl -sf http://localhost:8000/ || {
+            cat /tmp/django_server.log
+            exit 1
+          }
+
+      - name: "🧪 Run Sri Synthetic QA Bot"
+        id: bot_run
+        run: python core/sri_synthetic_bot.py
+        continue-on-error: true
+
+      - name: "📸 Upload failure screenshots"
+        if: steps.bot_run.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sri-bot-failure-screenshots
+          path: /tmp/sri_bot_screenshots/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: "📋 Upload server logs"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: django-server-logs
+          path: /tmp/django_server.log
+          retention-days: 3
+
+      - name: "🔍 Evaluate bot verdict"
+        run: |
+          if [ "${{ steps.bot_run.outcome }}" == "failure" ]; then
+            echo "❌ Patch REJECTED."
+            exit 1
+          else
+            echo "✅ Patch APPROVED for merge."
+          fi
+
+  sri-auto-merge:
+    name: "🔀 Safe Auto-Merge to Main"
+    runs-on: ubuntu-latest
+    needs: sri-verify
+    if: success()
+    timeout-minutes: 5
+
+    steps:
+      - name: "📥 Checkout"
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          fetch-depth: 0
+
+      - name: "🔀 Merge patch branch → main"
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          PATCH_BRANCH: ${{ github.ref_name }}
+        run: |
+          git config user.name  "Sri AI Bot"
+          git config user.email "sri-ai@anti-gravity.app"
+
+          PR_NUMBER=$(gh pr list \
+            --head "$PATCH_BRANCH" \
+            --state open \
+            --json number \
+            --jq '.[0].number')
+
+          if [ -z "$PR_NUMBER" ]; then
+            git fetch origin main
+            git checkout main
+            git merge --no-ff "origin/$PATCH_BRANCH" \
+              -m "fix(sri-ai): Auto-verified patch [$PATCH_BRANCH]"
+            git push origin main
+          else
+            gh pr merge "$PR_NUMBER" \
+              --squash \
+              --subject "fix(sri-ai): Auto-verified patch [$PATCH_BRANCH]" \
+              --delete-branch
+          fi
+
+  sri-reject-patch:
+    name: "🚫 Reject Failed Patch"
+    runs-on: ubuntu-latest
+    needs: sri-verify
+    if: failure()
+    timeout-minutes: 5
+
+    steps:
+      - name: "📥 Checkout"
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: "🚫 Close PR and delete branch"
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          PATCH_BRANCH: ${{ github.ref_name }}
+        run: |
+          PR_NUMBER=$(gh pr list \
+            --head "$PATCH_BRANCH" \
+            --state open \
+            --json number \
+            --jq '.[0].number')
+
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr close "$PR_NUMBER" \
+              --comment "❌ Patch auto-rejected — QA Bot found errors. Live site unaffected." \
+              --delete-branch
+          else
+            git push origin --delete "$PATCH_BRANCH" || true
+          fi
