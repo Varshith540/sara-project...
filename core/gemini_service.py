@@ -17,8 +17,8 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = 'models/gemini-2.0-flash-lite'   # primary — best free-tier limits
-FALLBACKS  = ['models/gemini-flash-latest', 'models/gemini-2.0-flash']
+MODEL_NAME = 'gemini-2.0-flash-lite'   # primary — best free-tier limits
+FALLBACKS  = ['gemini-flash-latest', 'gemini-2.0-flash']
 
 # ── OpenRouter models ────────────────────────────────────────────────────────
 _OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'

@@ -9,13 +9,13 @@ Author  : Anti Gravity / Sri AI Omni-Heal Initiative
 Pattern : Producer-Consumer (Queue + Daemon Thread)
 """
 
+import json
 import queue
-import threading
+import hashlib
 import logging
+import threading
 import traceback
 import time
-import json
-import hashlib
 from datetime import datetime, timezone
 from dataclasses import dataclass, field, asdict
 from typing import Optional
@@ -127,29 +127,69 @@ class _SoftHealEngine:
 
     def _analyse(self, job: HealJob):
         """
-        Core analysis step.
-        Calls the existing Sri AI Gemini pipeline and drafts a PR if needed.
+        Core analysis step — Level 6 Poly-Brain Architecture.
+
+        1. Calls the Poly-Brain LLM Router (generate_patch) which cascades
+           Gemini → OpenRouter → Ollama until a patch is produced.
+        2. Feeds the resulting patch into the Git Controller
+           (auto_heal_and_deploy) which pushes a branch, opens a PR, and
+           triggers the CI/CD pipeline for safe, verified auto-merge.
+
         Isolated in try/except so a broken analysis never crashes the worker.
         """
-        logger.info("[SoftHeal] Analysing job %s …", job.job_id)
+        logger.info("[SoftHeal] Analysing job %s (source=%s)…", job.job_id, job.error_source)
         try:
-            from core.sri_ai import draft_heal_pr          # late import: avoids circular
-            payload = {
-                "trigger": "SOFT_HEAL",
-                "job": asdict(job),
-            }
-            draft_heal_pr(
-                error_source=job.error_source,
-                error_trace=job.error_trace,
-                context=json.dumps(payload, indent=2),
+            # ── Step 1: Generate a patch via the Poly-Brain LLM Router ────────
+            from core.sri_llm_router import generate_patch   # late import: avoids circular
+
+            context_payload = json.dumps(
+                {"trigger": "SOFT_HEAL", "job": asdict(job)},
+                indent=2,
             )
-            logger.info("[SoftHeal] PR draft initiated for job %s.", job.job_id)
-        except ImportError:
-            # sri_ai module not wired yet — log only (safe degradation)
+
+            patch_content = generate_patch(
+                error_type=job.error_type,
+                error_trace=job.error_trace,
+                broken_file="",          # healer doesn't have file content; router will infer
+                context=context_payload,
+            )
+
+            if not patch_content:
+                logger.warning(
+                    "[SoftHeal] All LLM tiers exhausted for job %s — no patch generated.",
+                    job.job_id,
+                )
+                return
+
+            logger.info(
+                "[SoftHeal] Poly-Brain generated patch (%d chars) for job %s.",
+                len(patch_content),
+                job.job_id,
+            )
+
+            # ── Step 2: Push patch through the Git Controller → CI/CD ─────────
+            from core.sri_ai import auto_heal_and_deploy    # late import: avoids circular
+
+            result = auto_heal_and_deploy(
+                job_id=job.job_id,
+                file_path=job.error_source,   # e.g. "core/resume_parser.py"
+                new_content=patch_content,
+                error_summary=job.error_trace[:500],
+                severity=job.severity,
+            )
+
+            logger.info(
+                "[SoftHeal] Git Controller result for job %s: status=%s",
+                job.job_id,
+                result.get("status"),
+            )
+
+        except ImportError as exc:
+            # Graceful degradation: router/controller not wired yet
             logger.warning(
-                "[SoftHeal] sri_ai.draft_heal_pr not found. "
-                "Logging error for manual review.\n"
+                "[SoftHeal] Required module not found (%s) — logging for manual review.\n"
                 "Source : %s\nTrace  :\n%s",
+                exc,
                 job.error_source,
                 job.error_trace,
             )
